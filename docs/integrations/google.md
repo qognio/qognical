@@ -9,7 +9,7 @@ Setup nötig (siehe ADR-0001).
 2. **APIs & Services** → **Calendar API** aktivieren.
 3. **OAuth Consent Screen**: External, Scope `.../auth/calendar`.
 4. **Credentials** → **OAuth Client ID** (Web application). Authorized
-   redirect URI: `https://book.example.com/oauth/google/callback` (Phase 4).
+   redirect URI: `https://<your-host>/oauth/google/callback`.
 
 ## Credentials-Shape
 
