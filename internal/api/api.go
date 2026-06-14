@@ -531,11 +531,24 @@ func (a *API) verifyTokenForBooking(e *core.RequestEvent, bookingID string, acti
 	if tokenBookingID != bookingID {
 		return writeErr(e, httpStatusFor(CodeTokenInvalid), CodeTokenInvalid, "token-booking mismatch", nil)
 	}
-	// View tokens authorize all read actions including cancel/reschedule
-	// initiated by the invitee; this matches the planning docs where one
-	// signed link in the email lets the invitee inspect + mutate.
-	_ = tokenAction
-	_ = action
+	// Authorize the requested action against the token's authority:
+	//   - View tokens may only read.
+	//   - Cancel and Reschedule tokens additionally authorize View (any
+	//     mutate-capable link sent to an invitee should also let them
+	//     read the booking they're about to mutate).
+	//   - A Cancel token cannot reschedule; a Reschedule token cannot cancel.
+	switch action {
+	case token.ActionView:
+		// any non-revoked token authorizes view
+	case token.ActionCancel:
+		if tokenAction != token.ActionCancel {
+			return writeErr(e, httpStatusFor(CodeTokenInvalid), CodeTokenInvalid, "token does not authorize cancel", nil)
+		}
+	case token.ActionReschedule:
+		if tokenAction != token.ActionReschedule {
+			return writeErr(e, httpStatusFor(CodeTokenInvalid), CodeTokenInvalid, "token does not authorize reschedule", nil)
+		}
+	}
 	return nil
 }
 

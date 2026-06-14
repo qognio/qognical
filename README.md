@@ -98,26 +98,17 @@ Detail: [`docs/planning/03-architecture.md`](docs/planning/03-architecture.md).
 - [`PRIVACY.md`](PRIVACY.md) — DSGVO, Aufbewahrungsfristen, Datenfluss
 - [`UPGRADING.md`](UPGRADING.md) — Versions-Update-Pfad
 - [`docs/integrations/`](docs/integrations/) — pro Provider eine Setup-Anleitung
-- [`docs/planning/`](docs/planning/) — verbindliche Planungs-Dokumente
-- [`docs/decisions/`](docs/decisions/) — Architecture Decision Records
-- [`ISSUES.md`](ISSUES.md) — bewusst getroffene Entscheidungen während der
-  Implementierung (Review-Material)
+- [`ROADMAP.md`](ROADMAP.md) — was als nächstes kommt
+- [`KNOWN_LIMITATIONS.md`](KNOWN_LIMITATIONS.md) — was qognical bewusst (noch)
+  nicht tut
 
 ## Status
 
-Aktuelle Version: **v0.2.0** (Planungs-Phasen 1-5 + 1.1-Erweiterungen
-implementiert, noch keine echte Produktiv-Last gefahren). v1.0.0 wird das
-erste Release nach realer Battle-Tests in mindestens einer Produktiv-Instanz.
+Aktuelle Version: **v1.0.0** (initial public release).
 
-| Phase | Implementiert in | Status |
-|---|---|---|
-| 1 Fundament | v0.1.0 | ✓ |
-| 2 Booking-Core | v0.1.0 | ✓ |
-| 3 Integrations | v0.1.0 | ✓ (Stripe gegen Sandbox verifiziert) |
-| 4 Embed & Public-API | v0.1.0 | ✓ |
-| 5 Härtung & Release | v0.1.0 | ✓ |
-| 1.1 Round-Robin/Groups/Approval/Branding/i18n | v0.2.0 | ✓ |
-| 1.2 PayPal Sub / Stripe Connect / Zoom / Google Meet / Form-Builder | v0.3.0 | in Arbeit |
+Eine Liste der bewussten v1.0-Trade-offs findest du in
+[`KNOWN_LIMITATIONS.md`](KNOWN_LIMITATIONS.md); was geplant ist in
+[`ROADMAP.md`](ROADMAP.md).
 
 ## Lizenz
 
