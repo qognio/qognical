@@ -29,13 +29,32 @@ import (
 
 const Name = "google"
 
-// Credentials JSON (encrypted at rest).
+// Credentials JSON (encrypted at rest). Two auth modes are supported:
+//
+//   - OAuth2 user flow: client_id + client_secret + refresh_token. CalendarID
+//     defaults to "primary" (the consenting user's own calendar).
+//   - Service-account flow: a Google SA key JSON (type=="service_account" with
+//     private_key/client_email/token_uri). The adapter signs a JWT and uses the
+//     jwt-bearer grant. There is no user consent; instead the target calendar is
+//     shared with the SA's client_email. CalendarID MUST be the shared calendar's
+//     address (e.g. the owner's gmail), because "primary" would resolve to the
+//     SA's own (empty) calendar.
 type Credentials struct {
-	ClientID     string `json:"client_id"`
-	ClientSecret string `json:"client_secret"`
-	RefreshToken string `json:"refresh_token"`
-	CalendarID   string `json:"calendar_id"` // "primary" or specific id
+	// OAuth2 user flow
+	ClientID     string `json:"client_id,omitempty"`
+	ClientSecret string `json:"client_secret,omitempty"`
+	RefreshToken string `json:"refresh_token,omitempty"`
+	// Service-account flow (fields mirror a Google SA key JSON)
+	Type         string `json:"type,omitempty"`
+	PrivateKey   string `json:"private_key,omitempty"`
+	PrivateKeyID string `json:"private_key_id,omitempty"`
+	ClientEmail  string `json:"client_email,omitempty"`
+	TokenURI     string `json:"token_uri,omitempty"`
+	// common
+	CalendarID string `json:"calendar_id"` // "primary" or specific id/address
 }
+
+func (c Credentials) isServiceAccount() bool { return c.Type == "service_account" }
 
 type Config struct {
 	OAuthBase string `json:"oauth_base,omitempty"`
@@ -47,11 +66,23 @@ func Factory(credsRaw, confRaw json.RawMessage) (adapters.CalendarProvider, erro
 	if err := json.Unmarshal(credsRaw, &c); err != nil {
 		return nil, fmt.Errorf("google creds: %w", err)
 	}
-	if c.ClientID == "" || c.ClientSecret == "" || c.RefreshToken == "" {
-		return nil, errors.New("google: client_id/client_secret/refresh_token required")
-	}
-	if c.CalendarID == "" {
-		c.CalendarID = "primary"
+	if c.isServiceAccount() {
+		if c.PrivateKey == "" || c.ClientEmail == "" {
+			return nil, errors.New("google: service_account requires private_key and client_email")
+		}
+		if c.TokenURI == "" {
+			c.TokenURI = "https://oauth2.googleapis.com/token"
+		}
+		if c.CalendarID == "" {
+			return nil, errors.New("google: service_account requires calendar_id (the shared calendar address; 'primary' would be the SA's own calendar)")
+		}
+	} else {
+		if c.ClientID == "" || c.ClientSecret == "" || c.RefreshToken == "" {
+			return nil, errors.New("google: client_id/client_secret/refresh_token required")
+		}
+		if c.CalendarID == "" {
+			c.CalendarID = "primary"
+		}
 	}
 	cfg := Config{
 		OAuthBase: "https://oauth2.googleapis.com",
@@ -82,17 +113,30 @@ func (p *Provider) accessToken(ctx context.Context) (string, error) {
 	if p.token != "" && time.Now().Before(p.tokenExp.Add(-60*time.Second)) {
 		return p.token, nil
 	}
+	var form map[string]string
+	if p.creds.isServiceAccount() {
+		assertion, err := p.signJWT(time.Now())
+		if err != nil {
+			return "", fmt.Errorf("%w: sign jwt: %v", adapters.ErrAuth, err)
+		}
+		form = map[string]string{
+			"grant_type": "urn:ietf:params:oauth:grant-type:jwt-bearer",
+			"assertion":  assertion,
+		}
+	} else {
+		form = map[string]string{
+			"client_id":     p.creds.ClientID,
+			"client_secret": p.creds.ClientSecret,
+			"refresh_token": p.creds.RefreshToken,
+			"grant_type":    "refresh_token",
+		}
+	}
 	var tr struct {
 		AccessToken string `json:"access_token"`
 		ExpiresIn   int    `json:"expires_in"`
 		Error       string `json:"error"`
 	}
-	err := httpx.DoForm(ctx, p.cfg.OAuthBase+"/token", map[string]string{
-		"client_id":     p.creds.ClientID,
-		"client_secret": p.creds.ClientSecret,
-		"refresh_token": p.creds.RefreshToken,
-		"grant_type":    "refresh_token",
-	}, &tr)
+	err := httpx.DoForm(ctx, p.cfg.OAuthBase+"/token", form, &tr)
 	if err != nil {
 		return "", err
 	}
