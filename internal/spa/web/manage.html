@@ -1,0 +1,871 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<title>{{ORG_NAME}} – Termin verwalten</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  /* ------------------------------------------------------------------
+     Manage — same editorial language as book.html / host-dashboard:
+     warm-grey neutrals, dashed hairlines, monospace numerics, single
+     accent, semantic tints for status. Single-column, max 640px wide.
+     ------------------------------------------------------------------ */
+  :root {
+    --bg: #fafaf8;
+    --surface: #ffffff;
+    --surface-2: #f4f4ef;
+    --surface-3: #ebebe5;
+    --fg: #16161a;
+    --fg-soft: #2c2c33;
+    --muted: #6a6a72;
+    --muted-soft: #9a9aa2;
+    --border: #e8e8e3;
+    --border-strong: #d6d6d0;
+    --accent: #2b5adc;
+    --accent-deep: #1f44b0;
+    --accent-soft: #eef2fd;
+    --accent-tint: #f6f8fe;
+    --on-accent: #ffffff;
+    --success: #197a52;
+    --success-soft: #e6f3ec;
+    --warn: #a4690d;
+    --warn-soft: #fbf2e0;
+    --danger: #b91c1c;
+    --danger-soft: #fdecec;
+    --radius: 8px;
+    --radius-lg: 12px;
+    --mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
+    --sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    --ease: cubic-bezier(.4,1.6,.6,1);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0c0c0f;
+      --surface: #131318;
+      --surface-2: #1a1a20;
+      --surface-3: #22222a;
+      --fg: #f3f3f0;
+      --fg-soft: #d8d8d4;
+      --muted: #8b8b94;
+      --muted-soft: #5a5a63;
+      --border: #22222a;
+      --border-strong: #32323c;
+      --accent: #7493ef;
+      --accent-deep: #94aff6;
+      --accent-soft: #1a2342;
+      --accent-tint: #131a30;
+      --on-accent: #0c0c0f;
+      --success: #4ec491;
+      --success-soft: #142319;
+      --warn: #d39a4a;
+      --warn-soft: #2a200f;
+      --danger: #f17171;
+      --danger-soft: #2a1414;
+    }
+  }
+  *, *::before, *::after { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  html { color-scheme: light dark; }
+  body {
+    font: 14.5px/1.55 var(--sans);
+    color: var(--fg);
+    background: var(--bg);
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+    font-feature-settings: "ss01", "cv11";
+    min-height: 100vh;
+  }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; text-underline-offset: 3px; text-decoration-thickness: 1px; }
+  button { font: inherit; color: inherit; }
+  input, select, textarea { font: inherit; color: inherit; }
+  ::selection { background: var(--accent-soft); color: var(--accent-deep); }
+  .num { font-family: var(--mono); font-variant-numeric: tabular-nums; letter-spacing: -0.02em; }
+
+  /* -------- Shell -------- */
+  .page {
+    max-width: 640px;
+    margin: 0 auto;
+    padding: 56px 24px 40px;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+  }
+  @media (max-width: 640px) {
+    .page { padding: 32px 16px 28px; }
+  }
+
+  /* -------- Header -------- */
+  .head { margin-bottom: 28px; }
+  .accent-mark {
+    width: 28px; height: 3px;
+    background: var(--accent);
+    border-radius: 2px;
+    margin-bottom: 14px;
+  }
+  .eyebrow {
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.16em;
+    color: var(--muted-soft);
+    margin: 0 0 8px;
+  }
+  .head h1 {
+    margin: 0;
+    font-size: 1.55rem;
+    font-weight: 600;
+    letter-spacing: -0.028em;
+    line-height: 1.15;
+    color: var(--fg);
+  }
+  .head .lede {
+    margin: 8px 0 0;
+    color: var(--muted);
+    font-size: 0.92rem;
+  }
+
+  /* -------- Cards -------- */
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    padding: 22px 24px;
+    margin-bottom: 14px;
+  }
+  @media (max-width: 640px) {
+    .card { padding: 18px 18px; }
+  }
+  .card-head {
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 12px;
+    padding-bottom: 14px;
+    margin-bottom: 16px;
+    border-bottom: 1px dashed var(--border-strong);
+  }
+  .card-title {
+    font-size: 0.74rem;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.16em;
+    margin: 0;
+    font-weight: 500;
+  }
+
+  /* -------- Summary -------- */
+  .summary { position: relative; }
+  .summary .event-title {
+    margin: 0 0 14px;
+    font-size: 1.35rem;
+    font-weight: 600;
+    letter-spacing: -0.024em;
+    line-height: 1.2;
+    color: var(--fg);
+    padding-right: 110px;
+  }
+  .summary .status {
+    position: absolute;
+    top: 22px; right: 24px;
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    letter-spacing: 0.14em;
+    padding: 4px 10px;
+    border-radius: 999px;
+    border: 1px solid transparent;
+    font-weight: 500;
+    white-space: nowrap;
+  }
+  .status.confirmed   { background: var(--success-soft); color: var(--success); border-color: color-mix(in oklab, var(--success) 25%, transparent); }
+  .status.pending     { background: var(--warn-soft);    color: var(--warn);    border-color: color-mix(in oklab, var(--warn) 25%, transparent); }
+  .status.cancelled   { background: var(--danger-soft);  color: var(--danger);  border-color: color-mix(in oklab, var(--danger) 25%, transparent); }
+  .status.completed   { background: var(--surface-2);    color: var(--muted);   border-color: var(--border); }
+
+  @media (max-width: 480px) {
+    .summary .event-title { padding-right: 0; margin-top: 6px; }
+    .summary .status { position: static; display: inline-block; margin-bottom: 10px; }
+  }
+
+  .meta-grid {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    column-gap: 16px;
+    row-gap: 14px;
+    align-items: start;
+  }
+  .meta-grid .k {
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.16em;
+    color: var(--muted);
+    padding-top: 2px;
+  }
+  .meta-grid .v {
+    color: var(--fg);
+    font-size: 0.95rem;
+    min-width: 0;
+  }
+  .meta-grid .v.num { font-family: var(--mono); font-variant-numeric: tabular-nums; letter-spacing: -0.01em; }
+  .meta-grid .v .sub { display: block; color: var(--muted); font-size: 0.82rem; margin-top: 2px; }
+
+  .host-line {
+    display: flex; align-items: center; gap: 10px;
+  }
+  .avatar {
+    width: 30px; height: 30px;
+    border-radius: 50%;
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    color: var(--fg-soft);
+    display: grid; place-items: center;
+    font-weight: 600; font-size: 0.74rem;
+    letter-spacing: 0.02em;
+    flex: none;
+  }
+  .loc-badge {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 3px 9px;
+    border-radius: 6px;
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    font-size: 0.85rem;
+    color: var(--fg-soft);
+  }
+  .loc-badge svg { width: 14px; height: 14px; color: var(--muted); flex: none; }
+
+  .meeting-row {
+    margin-top: 14px;
+    padding-top: 14px;
+    border-top: 1px dashed var(--border);
+    display: flex; align-items: center; gap: 10px;
+  }
+  .meeting-link {
+    flex: 1;
+    min-width: 0;
+    font-family: var(--mono);
+    font-size: 0.82rem;
+    color: var(--accent);
+    background: var(--accent-tint);
+    border: 1px solid color-mix(in oklab, var(--accent) 22%, var(--border));
+    padding: 8px 10px;
+    border-radius: 7px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    text-decoration: none;
+  }
+  .meeting-link:hover { text-decoration: none; background: var(--accent-soft); }
+  .copy-btn {
+    appearance: none;
+    border: 1px solid var(--border-strong);
+    background: var(--surface);
+    color: var(--fg-soft);
+    padding: 8px 10px;
+    border-radius: 7px;
+    cursor: pointer;
+    font-size: 0.8rem;
+    display: inline-flex; align-items: center; gap: 6px;
+    transition: border-color .18s var(--ease), color .18s var(--ease), background .18s var(--ease);
+    flex: none;
+  }
+  .copy-btn:hover { border-color: var(--fg-soft); }
+  .copy-btn.copied { color: var(--success); border-color: color-mix(in oklab, var(--success) 35%, var(--border)); background: var(--success-soft); }
+  .copy-btn svg { width: 13px; height: 13px; }
+
+  /* -------- Actions -------- */
+  .actions-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+  }
+  @media (max-width: 480px) {
+    .actions-row { grid-template-columns: 1fr; }
+  }
+  .btn {
+    appearance: none;
+    border: 1px solid var(--border-strong);
+    background: var(--surface);
+    color: var(--fg);
+    padding: 12px 16px;
+    border-radius: 8px;
+    font-size: 0.92rem;
+    font-weight: 500;
+    cursor: pointer;
+    display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+    transition: border-color .18s var(--ease), background .18s var(--ease), color .18s var(--ease);
+  }
+  .btn:hover:not(:disabled) { border-color: var(--fg-soft); }
+  .btn:disabled { opacity: 0.55; cursor: not-allowed; }
+  .btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .btn.primary {
+    background: var(--accent); color: var(--on-accent); border-color: var(--accent);
+  }
+  .btn.primary:hover:not(:disabled) { background: var(--accent-deep); border-color: var(--accent-deep); }
+  .btn.danger { color: var(--danger); border-color: color-mix(in oklab, var(--danger) 30%, var(--border-strong)); }
+  .btn.danger:hover:not(:disabled) { background: var(--danger-soft); border-color: var(--danger); }
+  .btn.ghost { background: transparent; border-color: transparent; color: var(--muted); }
+  .btn.ghost:hover:not(:disabled) { background: var(--surface-2); color: var(--fg); border-color: var(--border); }
+  .btn svg { width: 15px; height: 15px; }
+
+  /* -------- Inline action panels -------- */
+  .inline-panel {
+    margin-top: 16px;
+    padding-top: 16px;
+    border-top: 1px dashed var(--border-strong);
+  }
+  .field { display: block; margin-bottom: 14px; }
+  .field label {
+    display: block;
+    font-size: 0.72rem;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.16em;
+    margin-bottom: 8px;
+  }
+  .field input[type="datetime-local"],
+  .field textarea {
+    width: 100%;
+    padding: 10px 12px;
+    border: 1px solid var(--border-strong);
+    border-radius: 8px;
+    background: var(--surface);
+    color: var(--fg);
+    font-size: 0.95rem;
+    transition: border-color .18s var(--ease), box-shadow .18s var(--ease);
+    font-family: inherit;
+  }
+  .field input[type="datetime-local"] { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+  .field input:focus, .field textarea:focus {
+    outline: 0;
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px var(--accent-soft);
+  }
+  .field textarea { min-height: 84px; resize: vertical; }
+  .field .hint { margin-top: 6px; font-size: 0.78rem; color: var(--muted); }
+
+  .panel-actions {
+    display: flex; gap: 8px; justify-content: flex-end;
+    margin-top: 4px;
+  }
+
+  /* -------- Banners -------- */
+  .banner {
+    padding: 11px 14px;
+    border-radius: 9px;
+    font-size: 0.88rem;
+    display: flex; align-items: flex-start; gap: 8px;
+    margin-bottom: 14px;
+  }
+  .banner svg { width: 16px; height: 16px; flex: none; margin-top: 2px; }
+  .banner.danger {
+    border: 1px solid color-mix(in oklab, var(--danger) 30%, var(--border));
+    background: var(--danger-soft);
+    color: var(--danger);
+  }
+  .banner.success {
+    border: 1px solid color-mix(in oklab, var(--success) 30%, var(--border));
+    background: var(--success-soft);
+    color: var(--success);
+  }
+
+  /* -------- Cancelled / muted state -------- */
+  .muted-card {
+    border: 1px dashed var(--border-strong);
+    background: var(--surface-2);
+    border-radius: var(--radius-lg);
+    padding: 22px 24px;
+    text-align: center;
+    color: var(--muted);
+    margin-bottom: 14px;
+  }
+  .muted-card svg { width: 22px; height: 22px; color: var(--muted-soft); margin-bottom: 10px; }
+  .muted-card p { margin: 0; font-size: 0.94rem; color: var(--fg-soft); }
+  .muted-card p + p { margin-top: 4px; color: var(--muted); font-size: 0.85rem; }
+
+  /* -------- Loading + center messages -------- */
+  .center-msg {
+    text-align: center;
+    color: var(--muted);
+    padding: 56px 24px;
+    font-size: 0.94rem;
+  }
+  .skeleton {
+    background: linear-gradient(90deg, var(--surface-2) 0%, var(--surface-3) 50%, var(--surface-2) 100%);
+    background-size: 200% 100%;
+    animation: shimmer 1.4s linear infinite;
+    border-radius: 6px;
+    color: transparent;
+    display: inline-block;
+  }
+  @keyframes shimmer { from { background-position: 200% 0; } to { background-position: -200% 0; } }
+
+  /* -------- Footer -------- */
+  footer {
+    margin-top: auto;
+    padding-top: 36px;
+  }
+  .foot-inner {
+    border-top: 1px dashed var(--border);
+    padding-top: 16px;
+    text-align: center;
+    color: var(--muted);
+    font-size: 0.82rem;
+  }
+  .foot-inner a { color: var(--accent); }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+  }
+</style>
+</head>
+<body>
+
+<div class="page" id="page">
+  <main id="app">
+    <div class="center-msg">Wird geladen…</div>
+  </main>
+  <footer>
+    <div class="foot-inner">
+      Brauchst du Hilfe? Schreib an <a href="mailto:meeting@example.com">meeting@example.com</a>.
+    </div>
+  </footer>
+</div>
+
+<script>
+(() => {
+  /* ---------- URL parsing ---------- */
+  const path = location.pathname.split('/').filter(Boolean);
+  const tokenParam = new URLSearchParams(location.search).get('token') || '';
+
+  const ICON = {
+    clock:  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>',
+    cal:    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 9h18M8 3v4M16 3v4"/></svg>',
+    user:   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg>',
+    globe:  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/></svg>',
+    teams:  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="6" width="13" height="12" rx="2"/><path d="M16 10l5-3v10l-5-3z"/></svg>',
+    meet:   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="6" width="13" height="12" rx="2"/><path d="M16 10l5-3v10l-5-3z"/></svg>',
+    phone:  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M5 4h4l2 5-2.5 1.5a11 11 0 0 0 5 5L15 13l5 2v4a2 2 0 0 1-2 2A16 16 0 0 1 3 6a2 2 0 0 1 2-2Z"/></svg>',
+    pin:    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s7-7.6 7-13a7 7 0 1 0-14 0c0 5.4 7 13 7 13Z"/><circle cx="12" cy="9" r="2.5"/></svg>',
+    swap:   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8h13l-3-3M21 16H8l3 3"/></svg>',
+    x:      '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M6 6l12 12M18 6 6 18"/></svg>',
+    check:  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 4 4 10-10"/></svg>',
+    alert:  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 8v5M12 16h.01"/></svg>',
+    copy:   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg>',
+    arrowR: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>',
+    info:   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7h.01"/></svg>',
+  };
+
+  const esc = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, c =>
+    ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'})[c]);
+  const escAttr = (s) => String(s == null ? '' : s).replace(/"/g, '&quot;');
+
+  const app = document.getElementById('app');
+
+  function showFatal(title, detail) {
+    app.innerHTML = `
+      <div class="head">
+        <div class="accent-mark" aria-hidden="true"></div>
+        <p class="eyebrow">Termin verwalten</p>
+        <h1>${esc(title)}</h1>
+        ${detail ? `<p class="lede">${esc(detail)}</p>` : ''}
+      </div>
+      <div class="muted-card">
+        ${ICON.info}
+        <p>Bitte öffne den Link erneut aus deiner Bestätigungs-E-Mail.</p>
+      </div>`;
+  }
+
+  if (path[0] !== 'manage' || !path[1]) {
+    showFatal('Ungültige Adresse', 'Der Link, dem du gefolgt bist, ist nicht vollständig.');
+    return;
+  }
+  const bookingID = path[1];
+  if (!tokenParam) {
+    showFatal('Sicherheits-Token fehlt', 'Dieser Link enthält keinen gültigen Zugangs-Token.');
+    return;
+  }
+
+  /* ---------- Formatters (tz-aware once we know invitee timezone) ---------- */
+  const browserTz = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
+  let activeTz = browserTz;
+
+  function fmtTime(iso) {
+    return new Intl.DateTimeFormat('de-DE', {
+      hour: '2-digit', minute: '2-digit', timeZone: activeTz,
+    }).format(new Date(iso));
+  }
+  function fmtDayLong(iso) {
+    return new Intl.DateTimeFormat('de-DE', {
+      weekday: 'long', day: 'numeric', month: 'long', year: 'numeric',
+      timeZone: activeTz,
+    }).format(new Date(iso));
+  }
+  function fmtDuration(min) {
+    const m = Number(min);
+    if (!Number.isFinite(m) || m <= 0) return '–';
+    if (m < 60) return `${m} Min`;
+    const h = Math.floor(m / 60);
+    const r = m % 60;
+    return r ? `${h} Std ${r} Min` : `${h} Std`;
+  }
+  function initialsFor(name) {
+    return (String(name || '').trim().split(/\s+/).slice(0, 2).map(p => p[0] || '').join('').toUpperCase()) || '··';
+  }
+  function locationMeta(type) {
+    switch (type) {
+      case 'online_teams':       return { icon: ICON.teams, label: 'Microsoft Teams' };
+      case 'online_google_meet': return { icon: ICON.meet,  label: 'Google Meet' };
+      case 'online_zoom':        return { icon: ICON.meet,  label: 'Zoom' };
+      case 'online_jitsi':       return { icon: ICON.meet,  label: 'Jitsi Meet' };
+      case 'phone':              return { icon: ICON.phone, label: 'Telefonisch' };
+      case 'in_person':          return { icon: ICON.pin,   label: 'Vor Ort' };
+      default:                   return { icon: ICON.cal,   label: type || 'Termin' };
+    }
+  }
+  function statusMeta(s) {
+    switch (s) {
+      case 'confirmed':         return { cls: 'confirmed', label: 'Bestätigt' };
+      case 'pending_approval':  return { cls: 'pending',   label: 'Wartet auf Bestätigung' };
+      case 'pending_payment':   return { cls: 'pending',   label: 'Zahlung ausstehend' };
+      case 'cancelled':         return { cls: 'cancelled', label: 'Abgesagt' };
+      case 'completed':         return { cls: 'completed', label: 'Abgeschlossen' };
+      case 'no_show':           return { cls: 'cancelled', label: 'Nicht erschienen' };
+      default:                  return { cls: 'completed', label: String(s || '–') };
+    }
+  }
+
+  /* ---------- Load ---------- */
+  async function load() {
+    let res, data;
+    try {
+      res = await fetch(`/api/public/v1/bookings/${encodeURIComponent(bookingID)}`,
+        { headers: { 'X-Booking-Token': tokenParam, 'Accept': 'application/json' } });
+      data = await res.json().catch(() => ({}));
+    } catch (e) {
+      showFatal('Verbindung fehlgeschlagen', 'Die Buchungsdaten konnten nicht abgerufen werden. Bitte versuche es später noch einmal.');
+      return;
+    }
+    if (!res.ok) {
+      const code = data && data.error && data.error.code;
+      const msg  = data && data.error && data.error.message;
+      let title = 'Termin nicht gefunden';
+      let detail = 'Möglicherweise ist der Link abgelaufen oder wurde bereits verwendet.';
+      if (code === 'token_expired' || /expired/i.test(msg || '')) {
+        title = 'Link abgelaufen';
+        detail = 'Dieser Verwaltungs-Link ist abgelaufen. Bitte wende dich an deinen Gastgeber.';
+      } else if (code === 'token_invalid' || /invalid/i.test(msg || '')) {
+        title = 'Link ungültig';
+        detail = 'Der Sicherheits-Token in deinem Link ist nicht gültig.';
+      }
+      showFatal(title, detail);
+      return;
+    }
+    if (data.invitee_timezone) activeTz = data.invitee_timezone;
+    render(data);
+  }
+
+  /* ---------- Render ---------- */
+  function render(b) {
+    const et = b.event_type || {};
+    const host = b.host || {};
+    const loc = locationMeta(et.location_type);
+    const st = statusMeta(b.status);
+    const initials = initialsFor(host.name);
+    const isCancelled = b.status === 'cancelled' || b.status === 'no_show';
+    const isCompleted = b.status === 'completed';
+    const canMutate = b.status === 'confirmed' || b.status === 'pending_approval';
+
+    const dayLine = fmtDayLong(b.start_utc);
+    const timeLine = `${fmtTime(b.start_utc)}${b.end_utc ? ' – ' + fmtTime(b.end_utc) : ''}`;
+
+    app.innerHTML = `
+      <div class="head">
+        <div class="accent-mark" aria-hidden="true"></div>
+        <p class="eyebrow">Dein Termin</p>
+        <h1>Termin verwalten</h1>
+        <p class="lede">Hier kannst du deinen Termin einsehen, verschieben oder absagen.</p>
+      </div>
+
+      <section class="card summary" aria-label="Termin-Übersicht">
+        <span class="status ${st.cls}" aria-label="Status">${esc(st.label)}</span>
+        <h2 class="event-title">${esc(et.title || 'Termin')}</h2>
+
+        <div class="meta-grid">
+          <div class="k">Datum</div>
+          <div class="v">${esc(dayLine)}</div>
+
+          <div class="k">Uhrzeit</div>
+          <div class="v num">
+            ${esc(timeLine)}
+            <span class="sub">${esc(activeTz)} · ${esc(fmtDuration(et.duration_min))}</span>
+          </div>
+
+          <div class="k">Teilnehmer</div>
+          <div class="v">
+            <div class="host-line">
+              <div class="avatar" aria-hidden="true">${esc(initials)}</div>
+              <div>${esc(host.name || '—')}</div>
+            </div>
+          </div>
+
+          <div class="k">Ort</div>
+          <div class="v">
+            <span class="loc-badge">${loc.icon}<span>${esc(loc.label)}</span></span>
+          </div>
+        </div>
+
+        ${b.meeting_url ? `
+          <div class="meeting-row">
+            <a class="meeting-link" href="${escAttr(b.meeting_url)}" target="_blank" rel="noopener" title="${escAttr(b.meeting_url)}">${esc(b.meeting_url)}</a>
+            <button type="button" class="copy-btn" id="copyMeeting" aria-label="Meeting-Link kopieren">
+              ${ICON.copy}<span class="cap">Kopieren</span>
+            </button>
+          </div>` : ''}
+      </section>
+
+      <div id="actionsSlot"></div>
+
+      ${isCancelled ? `
+        <div class="muted-card">
+          ${ICON.info}
+          <p>Dieser Termin wurde abgesagt.</p>
+          <p>Du kannst über die Startseite einen neuen Termin buchen.</p>
+        </div>` : ''}
+
+      ${isCompleted ? `
+        <div class="muted-card">
+          ${ICON.check}
+          <p>Dieser Termin ist abgeschlossen. Danke für deine Teilnahme.</p>
+        </div>` : ''}
+    `;
+
+    // Wire copy button
+    const copyBtn = document.getElementById('copyMeeting');
+    if (copyBtn && b.meeting_url) {
+      copyBtn.addEventListener('click', async () => {
+        try {
+          await navigator.clipboard.writeText(b.meeting_url);
+        } catch (_) {
+          const ta = document.createElement('textarea');
+          ta.value = b.meeting_url; document.body.appendChild(ta);
+          ta.select(); try { document.execCommand('copy'); } catch (_) {}
+          document.body.removeChild(ta);
+        }
+        copyBtn.classList.add('copied');
+        copyBtn.innerHTML = `${ICON.check}<span class="cap">Kopiert</span>`;
+        setTimeout(() => {
+          copyBtn.classList.remove('copied');
+          copyBtn.innerHTML = `${ICON.copy}<span class="cap">Kopieren</span>`;
+        }, 1800);
+      });
+    }
+
+    if (canMutate) renderActions(b, et);
+  }
+
+  /* ---------- Actions panel (default: 2 side-by-side buttons) ---------- */
+  function renderActions(b, et) {
+    const slot = document.getElementById('actionsSlot');
+    slot.innerHTML = `
+      <section class="card" aria-label="Aktionen">
+        <div class="card-head"><h3 class="card-title">Was möchtest du tun?</h3></div>
+        <div class="actions-row">
+          <button type="button" class="btn" id="openReschedule">
+            ${ICON.swap} Umbuchen
+          </button>
+          <button type="button" class="btn danger" id="openCancel">
+            ${ICON.x} Termin absagen
+          </button>
+        </div>
+        <div id="inlinePanel"></div>
+      </section>
+    `;
+    document.getElementById('openReschedule').addEventListener('click', () => openReschedule(b, et));
+    document.getElementById('openCancel').addEventListener('click', () => openCancel(b));
+  }
+
+  /* ---------- Reschedule inline panel ---------- */
+  function openReschedule(b, et) {
+    const slot = document.getElementById('inlinePanel');
+    // Pre-fill the datetime-local with the current slot, expressed in invitee TZ.
+    const initial = toLocalInputValue(b.start_utc, activeTz);
+    slot.innerHTML = `
+      <div class="inline-panel" id="rePanel">
+        <div class="field">
+          <label for="newStart">Neuer Termin-Beginn</label>
+          <input type="datetime-local" id="newStart" value="${escAttr(initial)}" step="900">
+          <div class="hint">Zeitzone: <span class="num">${esc(activeTz)}</span> · Dauer: <span class="num">${esc(fmtDuration(et.duration_min))}</span></div>
+        </div>
+        <div id="reError"></div>
+        <div class="panel-actions">
+          <button type="button" class="btn ghost" id="reCancel">Abbrechen</button>
+          <button type="button" class="btn primary" id="reConfirm">Termin verschieben ${ICON.arrowR}</button>
+        </div>
+      </div>
+    `;
+    requestAnimationFrame(() => document.getElementById('newStart').focus());
+    document.getElementById('reCancel').addEventListener('click', () => { slot.innerHTML = ''; });
+    document.getElementById('reConfirm').addEventListener('click', () => doReschedule(b));
+  }
+
+  async function doReschedule(b) {
+    const input = document.getElementById('newStart');
+    const errEl = document.getElementById('reError');
+    const btn = document.getElementById('reConfirm');
+    errEl.innerHTML = '';
+    const v = input.value;
+    if (!v) {
+      errEl.innerHTML = banner('danger', 'Bitte wähle einen neuen Zeitpunkt.');
+      return;
+    }
+    const iso = fromLocalInputValue(v, activeTz);
+    if (!iso || isNaN(new Date(iso).getTime())) {
+      errEl.innerHTML = banner('danger', 'Der gewählte Zeitpunkt ist ungültig.');
+      return;
+    }
+    if (new Date(iso).getTime() <= Date.now()) {
+      errEl.innerHTML = banner('danger', 'Der neue Zeitpunkt muss in der Zukunft liegen.');
+      return;
+    }
+    btn.disabled = true;
+    try {
+      const res = await fetch(`/api/public/v1/bookings/${encodeURIComponent(b.id)}/reschedule`, {
+        method: 'POST',
+        headers: {
+          'X-Booking-Token': tokenParam,
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+        },
+        body: JSON.stringify({ new_start_utc: iso }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        const msg = (data && data.error && humanError(data.error)) || 'Verschieben fehlgeschlagen.';
+        errEl.innerHTML = banner('danger', msg);
+        btn.disabled = false;
+        return;
+      }
+      // Reschedule rotates the token — use the new manage_url to reload.
+      const newUrl = data.manage_url || `${location.pathname}?token=${encodeURIComponent(tokenParam)}`;
+      try {
+        const u = new URL(newUrl, location.origin);
+        location.replace(u.pathname + u.search);
+      } catch (_) {
+        location.search = '?token=' + encodeURIComponent(tokenParam);
+      }
+    } catch (e) {
+      errEl.innerHTML = banner('danger', 'Netzwerkfehler. Bitte versuche es erneut.');
+      btn.disabled = false;
+    }
+  }
+
+  /* ---------- Cancel inline panel ---------- */
+  function openCancel(b) {
+    const slot = document.getElementById('inlinePanel');
+    slot.innerHTML = `
+      <div class="inline-panel" id="cxPanel">
+        <div class="field">
+          <label for="cxReason">Grund (optional)</label>
+          <textarea id="cxReason" placeholder="Damit ${esc((b.host && b.host.name || 'dein Gastgeber').split(' ')[0] || 'dein Gastgeber')} Bescheid weiß — kein Pflichtfeld."></textarea>
+        </div>
+        <div id="cxError"></div>
+        <div class="panel-actions">
+          <button type="button" class="btn ghost" id="cxBack">Doch behalten</button>
+          <button type="button" class="btn danger" id="cxConfirm">${ICON.x} Endgültig absagen</button>
+        </div>
+      </div>
+    `;
+    requestAnimationFrame(() => document.getElementById('cxReason').focus());
+    document.getElementById('cxBack').addEventListener('click', () => { slot.innerHTML = ''; });
+    document.getElementById('cxConfirm').addEventListener('click', () => doCancel(b));
+  }
+
+  async function doCancel(b) {
+    const errEl = document.getElementById('cxError');
+    const btn = document.getElementById('cxConfirm');
+    errEl.innerHTML = '';
+    const reason = (document.getElementById('cxReason').value || '').trim();
+    btn.disabled = true;
+    try {
+      const res = await fetch(`/api/public/v1/bookings/${encodeURIComponent(b.id)}/cancel`, {
+        method: 'POST',
+        headers: {
+          'X-Booking-Token': tokenParam,
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+        },
+        body: JSON.stringify({ reason }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        const msg = (data && data.error && humanError(data.error)) || 'Absage fehlgeschlagen.';
+        errEl.innerHTML = banner('danger', msg);
+        btn.disabled = false;
+        return;
+      }
+      // Re-render with cancelled state
+      load();
+    } catch (e) {
+      errEl.innerHTML = banner('danger', 'Netzwerkfehler. Bitte versuche es erneut.');
+      btn.disabled = false;
+    }
+  }
+
+  /* ---------- Helpers ---------- */
+  function banner(kind, msg) {
+    const icon = kind === 'danger' ? ICON.alert : ICON.check;
+    return `<div class="banner ${esc(kind)}">${icon}<div>${esc(msg)}</div></div>`;
+  }
+  function humanError(err) {
+    const m = err.message || '';
+    switch (err.code) {
+      case 'slot_unavailable':       return 'Dieser Zeitpunkt ist bereits vergeben. Bitte wähle einen anderen.';
+      case 'slot_outside_availability': return 'Der Gastgeber ist zu diesem Zeitpunkt nicht verfügbar.';
+      case 'slot_too_soon':          return 'Der gewählte Zeitpunkt liegt zu kurzfristig.';
+      case 'slot_too_far':           return 'Der gewählte Zeitpunkt liegt zu weit in der Zukunft.';
+      case 'event_type_inactive':    return 'Dieser Termin-Typ ist nicht mehr verfügbar.';
+      case 'token_expired':          return 'Dein Verwaltungs-Link ist abgelaufen.';
+      case 'token_already_used':     return 'Dieser Link wurde bereits verwendet.';
+      case 'invalid_request':        return m || 'Die Anfrage ist ungültig.';
+      default:                       return m || 'Etwas ist schiefgelaufen.';
+    }
+  }
+
+  /* Convert ISO-UTC into a "YYYY-MM-DDTHH:MM" value for <input type=datetime-local>,
+     expressed in the chosen timezone (not the browser's). */
+  function toLocalInputValue(iso, tz) {
+    try {
+      const parts = new Intl.DateTimeFormat('en-CA', {
+        year: 'numeric', month: '2-digit', day: '2-digit',
+        hour: '2-digit', minute: '2-digit', hour12: false, timeZone: tz,
+      }).formatToParts(new Date(iso));
+      const get = (t) => (parts.find(p => p.type === t) || {}).value || '00';
+      return `${get('year')}-${get('month')}-${get('day')}T${get('hour')}:${get('minute')}`;
+    } catch (_) {
+      return '';
+    }
+  }
+  /* Inverse: take a "YYYY-MM-DDTHH:MM" wall-clock string in tz `tz` and return
+     an ISO UTC string. Uses a small fixed-point search around the naive offset. */
+  function fromLocalInputValue(localStr, tz) {
+    const m = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/.exec(localStr);
+    if (!m) return '';
+    const [, Y, Mo, D, H, Mi] = m.map(Number);
+    // Naive UTC guess (treat local as UTC)
+    let guess = Date.UTC(Y, Mo - 1, D, H, Mi);
+    for (let i = 0; i < 3; i++) {
+      const wall = toLocalInputValue(new Date(guess).toISOString(), tz);
+      const wm = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/.exec(wall || '');
+      if (!wm) break;
+      const [, wY, wMo, wD, wH, wMi] = wm.map(Number);
+      const diffMin =
+        (Date.UTC(Y, Mo - 1, D, H, Mi) - Date.UTC(wY, wMo - 1, wD, wH, wMi)) / 60000;
+      if (diffMin === 0) break;
+      guess += diffMin * 60000;
+    }
+    return new Date(guess).toISOString();
+  }
+
+  load();
+})();
+</script>
+</body>
+</html>

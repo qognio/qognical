@@ -1,0 +1,40 @@
+# Build artefacts
+/qognical
+/bin/
+/dist/
+*.exe
+
+# Go
+/vendor/
+*.test
+*.out
+coverage.txt
+
+# PocketBase data (Selfhost-Volume)
+/pb_data/
+
+# Local config / secrets
+.env
+.env.local
+*.local
+
+# Editor / OS
+.idea/
+.vscode/
+*.swp
+*~
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Runtime artefacts
+server.pid
+pb_data/
+*.db
+*.db-shm
+*.db-wal
+.env
+.env.local
+*.json.tmp

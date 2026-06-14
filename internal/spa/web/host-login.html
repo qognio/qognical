@@ -1,0 +1,331 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<title>{{ORG_NAME}} — Anmelden</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root {
+    --bg: #fafaf8;
+    --surface: #ffffff;
+    --fg: #16161a;
+    --fg-soft: #2c2c33;
+    --muted: #76767f;
+    --muted-soft: #a8a8b0;
+    --border: #e8e8e3;
+    --border-strong: #d6d6d0;
+    --accent: #2b5adc;
+    --accent-soft: #eef2fd;
+    --accent-deep: #1f44b0;
+    --danger: #b91c1c;
+    --danger-soft: #fdecec;
+    --radius: 10px;
+    --radius-lg: 14px;
+    --shadow-inset: inset 0 0 0 1px var(--border);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0d0d10;
+      --surface: #15151a;
+      --fg: #f3f3f0;
+      --fg-soft: #d8d8d4;
+      --muted: #8b8b94;
+      --muted-soft: #5a5a63;
+      --border: #24242b;
+      --border-strong: #34343c;
+      --accent: #6f8eef;
+      --accent-soft: #1a2545;
+      --accent-deep: #8aa5f5;
+      --danger: #f17171;
+      --danger-soft: #2a1414;
+    }
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    font: 15px/1.5 ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    color: var(--fg);
+    background: var(--bg);
+    margin: 0;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+    font-feature-settings: "ss01", "cv11";
+  }
+  .stage {
+    min-height: 100vh;
+    display: grid;
+    grid-template-columns: 1fr;
+    align-items: center;
+    justify-items: center;
+    padding: 48px 24px;
+    position: relative;
+    overflow: hidden;
+  }
+  .stage::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background:
+      radial-gradient(60% 50% at 50% 0%, color-mix(in oklab, var(--accent) 8%, transparent), transparent 70%),
+      linear-gradient(180deg, transparent 70%, color-mix(in oklab, var(--accent) 4%, transparent) 100%);
+    pointer-events: none;
+  }
+  .panel {
+    position: relative;
+    width: 100%;
+    max-width: 420px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    padding: 40px 36px 32px;
+  }
+  .mark {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 0.78rem;
+    text-transform: uppercase;
+    letter-spacing: 0.18em;
+    color: var(--muted);
+    margin-bottom: 28px;
+  }
+  .mark .dot {
+    width: 8px; height: 8px; border-radius: 50%;
+    background: var(--accent);
+    box-shadow: 0 0 0 4px var(--accent-soft);
+  }
+  h1 {
+    font-size: 1.65rem;
+    font-weight: 600;
+    letter-spacing: -0.025em;
+    margin: 0 0 6px;
+    line-height: 1.15;
+  }
+  .lede {
+    color: var(--muted);
+    margin: 0 0 28px;
+    font-size: 0.95rem;
+  }
+  .btn-oidc {
+    width: 100%;
+    appearance: none;
+    border: 1px solid var(--accent);
+    background: var(--accent);
+    color: #fff;
+    padding: 14px 16px;
+    border-radius: var(--radius);
+    font: 500 0.95rem/1 inherit;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    transition: background .15s, transform .05s;
+  }
+  .btn-oidc:hover { background: var(--accent-deep); border-color: var(--accent-deep); }
+  .btn-oidc:active { transform: translateY(1px); }
+  .btn-oidc svg { width: 18px; height: 18px; }
+  .divider {
+    display: flex; align-items: center; gap: 12px;
+    color: var(--muted-soft);
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.16em;
+    margin: 22px 0 18px;
+  }
+  .divider::before, .divider::after {
+    content: ""; flex: 1; height: 1px; background: var(--border);
+  }
+  .fallback {
+    transition: opacity .2s, max-height .25s;
+  }
+  .fallback[hidden] { display: block; opacity: 0; max-height: 0; overflow: hidden; pointer-events: none; }
+  .fallback:not([hidden]) { opacity: 1; max-height: 600px; }
+  .field { margin-bottom: 12px; }
+  .field label {
+    display: block;
+    font-size: 0.78rem;
+    color: var(--muted);
+    margin-bottom: 6px;
+    letter-spacing: 0.02em;
+  }
+  .field input {
+    width: 100%;
+    padding: 11px 12px;
+    border: 1px solid var(--border-strong);
+    background: var(--surface);
+    color: var(--fg);
+    border-radius: var(--radius);
+    font: inherit;
+    transition: border-color .12s, box-shadow .12s;
+  }
+  .field input:focus {
+    outline: 0;
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px var(--accent-soft);
+  }
+  .btn-pw {
+    width: 100%;
+    margin-top: 4px;
+    padding: 11px 14px;
+    border: 1px solid var(--border-strong);
+    background: var(--surface);
+    color: var(--fg);
+    border-radius: var(--radius);
+    font: 500 0.92rem/1 inherit;
+    cursor: pointer;
+  }
+  .btn-pw:hover { border-color: var(--fg); }
+  .btn-pw:disabled { opacity: 0.5; cursor: not-allowed; }
+  .toggle {
+    margin-top: 18px;
+    text-align: center;
+    font-size: 0.82rem;
+  }
+  .toggle button {
+    background: none; border: 0; color: var(--muted); cursor: pointer;
+    font: inherit; padding: 4px 8px;
+    text-decoration: underline; text-decoration-color: var(--border-strong);
+    text-underline-offset: 3px;
+  }
+  .toggle button:hover { color: var(--fg); text-decoration-color: var(--accent); }
+  .error {
+    background: var(--danger-soft);
+    color: var(--danger);
+    border: 1px solid color-mix(in oklab, var(--danger) 30%, transparent);
+    padding: 10px 12px;
+    border-radius: var(--radius);
+    font-size: 0.88rem;
+    margin-bottom: 14px;
+  }
+  .meta {
+    margin-top: 28px;
+    text-align: center;
+    font-size: 0.78rem;
+    color: var(--muted-soft);
+  }
+  .meta a { color: var(--muted); text-decoration: none; border-bottom: 1px dotted var(--border-strong); }
+  .meta a:hover { color: var(--fg); }
+</style>
+</head>
+<body>
+<main class="stage">
+  <section class="panel" aria-labelledby="t">
+    <div class="mark"><span class="dot"></span>{{ORG_NAME}}</div>
+    <h1 id="t">Willkommen zurück</h1>
+    <p class="lede">Melde dich an, um deine Termine und Verfügbarkeiten zu verwalten.</p>
+
+    <div id="err" class="error" hidden></div>
+
+    <button class="btn-oidc" id="oidc">
+      <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+        <path d="M12 2 3 7v6c0 5 3.8 8.5 9 9 5.2-.5 9-4 9-9V7l-9-5Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/>
+        <path d="m8 12 3 3 5-6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+      Mit Authentik anmelden
+    </button>
+
+    <div class="divider">oder</div>
+
+    <form class="fallback" id="pwForm" hidden autocomplete="on">
+      <div class="field">
+        <label for="email">E-Mail</label>
+        <input id="email" type="email" autocomplete="username" required>
+      </div>
+      <div class="field">
+        <label for="pw">Passwort</label>
+        <input id="pw" type="password" autocomplete="current-password" required>
+      </div>
+      <button class="btn-pw" id="pwBtn" type="submit">Anmelden</button>
+    </form>
+
+    <div class="toggle">
+      <button id="toggle" type="button">Lokales Passwort verwenden</button>
+    </div>
+
+    <div class="meta">
+      Probleme beim Anmelden? <a href="mailto:support@example.com">Support kontaktieren</a>
+    </div>
+  </section>
+</main>
+
+<script>
+(() => {
+  const $ = id => document.getElementById(id);
+  const errEl = $('err');
+  const showErr = (msg) => { errEl.textContent = msg; errEl.hidden = false; };
+  const clearErr = () => { errEl.hidden = true; errEl.textContent = ''; };
+
+  // If already authed, bounce straight to dashboard.
+  try {
+    const cached = JSON.parse(localStorage.getItem('pb_host_auth') || 'null');
+    if (cached && cached.token) {
+      location.replace('/host/dashboard');
+      return;
+    }
+  } catch (_) {}
+
+  $('oidc').addEventListener('click', () => {
+    clearErr();
+    const next = encodeURIComponent('/host/dashboard');
+    location.href = `/api/host/auth/oauth2-authorize?provider=oidc&redirect=${next}`;
+  });
+
+  let fallbackOpen = false;
+  $('toggle').addEventListener('click', () => {
+    fallbackOpen = !fallbackOpen;
+    $('pwForm').hidden = !fallbackOpen;
+    $('toggle').textContent = fallbackOpen
+      ? 'Lokales Passwort ausblenden'
+      : 'Lokales Passwort verwenden';
+    if (fallbackOpen) setTimeout(() => $('email').focus(), 50);
+  });
+
+  $('pwForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    clearErr();
+    const btn = $('pwBtn');
+    btn.disabled = true;
+    btn.textContent = 'Anmelden…';
+    try {
+      const res = await fetch('/api/host/auth/password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          identity: $('email').value.trim(),
+          password: $('pw').value,
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error((data.error && data.error.message) || data.message || 'Anmeldung fehlgeschlagen.');
+      }
+      // PocketBase auth-with-password returns { token, record }
+      localStorage.setItem('pb_host_auth', JSON.stringify({
+        token: data.token,
+        record: data.record,
+      }));
+      location.replace('/host/dashboard');
+    } catch (err) {
+      showErr(err.message || 'Unbekannter Fehler.');
+      btn.disabled = false;
+      btn.textContent = 'Anmelden';
+    }
+  });
+
+  // OIDC return: backend may set ?token=… on the redirect. Capture, persist, clean URL.
+  const params = new URLSearchParams(location.search);
+  const tok = params.get('token');
+  if (tok) {
+    try {
+      const record = params.get('record') ? JSON.parse(decodeURIComponent(params.get('record'))) : null;
+      localStorage.setItem('pb_host_auth', JSON.stringify({ token: tok, record }));
+      location.replace('/host/dashboard');
+    } catch (e) {
+      showErr('Token konnte nicht gespeichert werden.');
+    }
+  }
+})();
+</script>
+</body>
+</html>

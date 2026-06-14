@@ -1,0 +1,1516 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<title>{{ORG_NAME}} – Termin buchen</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  /* ------------------------------------------------------------------
+     Same editorial language as host-dashboard: warm-grey neutrals,
+     dashed hairlines, single accent (event-type brand_color overrides),
+     tabular numerics for time pills, generous whitespace.
+     ------------------------------------------------------------------ */
+  :root {
+    --bg: #fafaf8;
+    --surface: #ffffff;
+    --surface-2: #f4f4ef;
+    --surface-3: #ebebe5;
+    --fg: #16161a;
+    --fg-soft: #2c2c33;
+    --muted: #6a6a72;
+    --muted-soft: #9a9aa2;
+    --border: #e8e8e3;
+    --border-strong: #d6d6d0;
+    --accent: #2b5adc;
+    --accent-deep: #1f44b0;
+    --accent-soft: #eef2fd;
+    --accent-tint: #f6f8fe;
+    --on-accent: #ffffff;
+    --success: #197a52;
+    --success-soft: #e6f3ec;
+    --warn: #a4690d;
+    --warn-soft: #fbf2e0;
+    --danger: #b91c1c;
+    --danger-soft: #fdecec;
+    --radius: 8px;
+    --radius-lg: 12px;
+    --mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
+    --sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0c0c0f;
+      --surface: #131318;
+      --surface-2: #1a1a20;
+      --surface-3: #22222a;
+      --fg: #f3f3f0;
+      --fg-soft: #d8d8d4;
+      --muted: #8b8b94;
+      --muted-soft: #5a5a63;
+      --border: #22222a;
+      --border-strong: #32323c;
+      --accent: #7493ef;
+      --accent-deep: #94aff6;
+      --accent-soft: #1a2342;
+      --accent-tint: #131a30;
+      --on-accent: #0c0c0f;
+      --success: #4ec491;
+      --success-soft: #142319;
+      --warn: #d39a4a;
+      --warn-soft: #2a200f;
+      --danger: #f17171;
+      --danger-soft: #2a1414;
+    }
+  }
+  *, *::before, *::after { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  html { color-scheme: light dark; }
+  body {
+    font: 14.5px/1.55 var(--sans);
+    color: var(--fg);
+    background: var(--bg);
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+    font-feature-settings: "ss01", "cv11";
+    min-height: 100vh;
+  }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; text-underline-offset: 3px; text-decoration-thickness: 1px; }
+  button { font: inherit; color: inherit; }
+  input, select, textarea { font: inherit; color: inherit; }
+  .num { font-family: var(--mono); font-variant-numeric: tabular-nums; letter-spacing: -0.02em; }
+  ::selection { background: var(--accent-soft); color: var(--accent-deep); }
+
+  /* -------- Shell -------- */
+  .page {
+    max-width: 1120px;
+    margin: 0 auto;
+    padding: 40px 28px 64px;
+  }
+  @media (max-width: 880px) {
+    .page { padding: 20px 16px 48px; }
+  }
+  /* Embed mode: when loaded inside an iframe via ?embed=1, drop outer page
+     padding and let the parent frame own the gutter. Body becomes a flush
+     container so the booking card sits edge-to-edge of the iframe. */
+  body.embed-mode { background: transparent; }
+  body.embed-mode .page { padding: 18px 16px; max-width: none; }
+  body.embed-mode .info { position: static; }
+
+  .layout {
+    display: grid;
+    grid-template-columns: 360px 1fr;
+    gap: 40px;
+    align-items: flex-start;
+  }
+  @media (max-width: 880px) {
+    .layout { grid-template-columns: 1fr; gap: 18px; }
+  }
+
+  /* -------- Left: event-info card -------- */
+  .info {
+    position: sticky;
+    top: 32px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    padding: 24px 24px 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+  }
+  .info .accent-mark {
+    width: 28px; height: 3px;
+    background: var(--accent);
+    border-radius: 2px;
+    margin-bottom: 4px;
+  }
+  .info .host-line {
+    display: flex; align-items: center; gap: 12px;
+  }
+  .avatar {
+    width: 38px; height: 38px;
+    border-radius: 50%;
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    color: var(--fg-soft);
+    display: grid; place-items: center;
+    font-weight: 600; font-size: 0.82rem;
+    letter-spacing: 0.02em;
+    flex: none;
+  }
+  .info .with {
+    font-size: 0.78rem; color: var(--muted);
+    letter-spacing: 0.02em;
+  }
+  .info .with strong { color: var(--fg-soft); font-weight: 500; }
+  .info h1 {
+    margin: 0;
+    font-size: 1.65rem;
+    font-weight: 600;
+    letter-spacing: -0.028em;
+    line-height: 1.15;
+    color: var(--fg);
+  }
+  .info .description {
+    color: var(--muted);
+    font-size: 0.9rem;
+    line-height: 1.55;
+    white-space: pre-wrap;
+  }
+  .meta-list {
+    display: flex; flex-direction: column;
+    gap: 10px;
+    padding-top: 16px;
+    border-top: 1px dashed var(--border-strong);
+  }
+  .meta-row {
+    display: flex; align-items: center; gap: 10px;
+    color: var(--fg-soft);
+    font-size: 0.88rem;
+  }
+  .meta-row svg {
+    width: 16px; height: 16px;
+    color: var(--muted);
+    flex: none;
+  }
+  .meta-row .v { font-weight: 500; }
+  .tz-select-wrap {
+    display: flex; align-items: center; gap: 10px;
+    width: 100%;
+  }
+  .tz-select-wrap svg { color: var(--muted); flex: none; }
+  .tz-select-wrap select {
+    flex: 1;
+    appearance: none;
+    background: transparent;
+    border: 0;
+    color: var(--fg-soft);
+    padding: 2px 22px 2px 0;
+    font-size: 0.88rem;
+    cursor: pointer;
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12' fill='none' stroke='%236a6a72' stroke-width='1.6' stroke-linecap='round'><path d='M3 5l3 3 3-3'/></svg>");
+    background-repeat: no-repeat;
+    background-position: right center;
+    background-size: 12px;
+    font-family: var(--mono);
+    font-size: 0.82rem;
+  }
+  .tz-select-wrap select:focus { outline: 2px solid var(--accent-soft); outline-offset: 2px; border-radius: 4px; }
+  .powered {
+    margin-top: 4px;
+    font-size: 0.72rem;
+    color: var(--muted-soft);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    text-align: left;
+  }
+  .powered strong { color: var(--muted); font-weight: 500; letter-spacing: 0.04em; text-transform: none; font-size: 0.8rem; }
+
+  /* Mobile: collapse to compact strip */
+  @media (max-width: 880px) {
+    .info {
+      position: static;
+      padding: 18px 18px 16px;
+      gap: 12px;
+    }
+    .info h1 { font-size: 1.35rem; }
+    .info .description { display: none; }
+    .info .description.expanded { display: block; }
+    .info .show-desc {
+      appearance: none; background: transparent; border: 0;
+      color: var(--accent); cursor: pointer; padding: 0;
+      font-size: 0.82rem; text-align: left;
+    }
+    .powered { display: none; }
+  }
+  @media (min-width: 881px) {
+    .info .show-desc { display: none; }
+  }
+
+  /* -------- Right: panel -------- */
+  .panel {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    padding: 24px 26px 28px;
+    min-height: 480px;
+  }
+  @media (max-width: 880px) {
+    .panel { padding: 18px 16px 22px; min-height: 0; }
+  }
+  .panel-head {
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 12px;
+    padding-bottom: 16px;
+    margin-bottom: 20px;
+    border-bottom: 1px dashed var(--border-strong);
+  }
+  .panel-title {
+    display: flex; align-items: center; gap: 12px;
+    font-size: 0.78rem;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.16em;
+  }
+  .step-no {
+    display: inline-grid; place-items: center;
+    width: 22px; height: 22px;
+    border-radius: 50%;
+    background: var(--accent-soft);
+    color: var(--accent-deep);
+    font: 600 0.72rem/1 var(--mono);
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* -------- Calendar -------- */
+  .cal-head {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-bottom: 14px;
+  }
+  .cal-head .month-label {
+    font-size: 1.02rem;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    color: var(--fg);
+  }
+  .cal-nav { display: flex; gap: 4px; }
+  .cal-nav button {
+    appearance: none;
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--fg-soft);
+    width: 30px; height: 30px;
+    border-radius: 7px;
+    cursor: pointer;
+    display: grid; place-items: center;
+    transition: border-color .12s, background .12s, color .12s;
+  }
+  .cal-nav button:hover:not(:disabled) {
+    border-color: var(--fg-soft);
+    background: var(--surface-2);
+  }
+  .cal-nav button:disabled { opacity: 0.35; cursor: not-allowed; }
+  .cal-nav button svg { width: 14px; height: 14px; }
+
+  .cal {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 4px;
+  }
+  .cal .dow {
+    text-align: center;
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.14em;
+    color: var(--muted-soft);
+    padding: 6px 0 10px;
+  }
+  .cal-day {
+    appearance: none;
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: 8px;
+    padding: 0;
+    aspect-ratio: 1 / 1;
+    cursor: pointer;
+    color: var(--fg-soft);
+    font: 500 0.92rem var(--mono);
+    font-variant-numeric: tabular-nums;
+    position: relative;
+    transition: background .12s, border-color .12s, color .12s, transform .08s;
+    display: grid; place-items: center;
+  }
+  .cal-day:hover:not(:disabled):not(.is-other) {
+    background: var(--surface-2);
+    border-color: var(--border-strong);
+  }
+  .cal-day:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+  .cal-day.is-other { color: transparent; cursor: default; pointer-events: none; }
+  .cal-day.is-past, .cal-day.is-empty {
+    color: var(--muted-soft);
+    cursor: not-allowed;
+  }
+  .cal-day.is-past::after, .cal-day.is-empty::after { content: none; }
+  .cal-day.has-slots::after {
+    content: "";
+    position: absolute;
+    bottom: 6px; left: 50%;
+    width: 4px; height: 4px;
+    transform: translateX(-50%);
+    border-radius: 50%;
+    background: var(--accent);
+    opacity: 0.6;
+  }
+  .cal-day.is-today {
+    color: var(--accent-deep);
+    font-weight: 600;
+  }
+  .cal-day.is-today.has-slots::after { background: var(--accent-deep); opacity: 1; }
+  .cal-day.is-selected {
+    background: var(--accent);
+    color: var(--on-accent);
+    border-color: var(--accent);
+  }
+  .cal-day.is-selected::after { background: var(--on-accent); opacity: 0.85; }
+  .cal-day.is-selected.is-today { color: var(--on-accent); }
+  .cal-day .tip {
+    position: absolute;
+    bottom: calc(100% + 6px);
+    left: 50%;
+    transform: translateX(-50%);
+    background: var(--fg);
+    color: var(--bg);
+    font: 11px/1 var(--mono);
+    padding: 4px 7px;
+    border-radius: 5px;
+    white-space: nowrap;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity .12s;
+    z-index: 3;
+  }
+  .cal-day:hover:not(:disabled):not(.is-other) .tip { opacity: 1; }
+  .cal-day.is-empty .tip, .cal-day.is-past .tip { display: none; }
+
+  /* -------- Slot strip -------- */
+  .slot-strip {
+    margin-top: 24px;
+    border-top: 1px dashed var(--border-strong);
+    padding-top: 18px;
+    min-height: 80px;
+  }
+  .slot-strip-head {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-bottom: 12px;
+    font-size: 0.8rem;
+    color: var(--muted);
+  }
+  .slot-strip-head .day-label {
+    color: var(--fg);
+    font-weight: 600;
+    font-size: 0.95rem;
+    letter-spacing: -0.01em;
+  }
+  .slot-group { margin-bottom: 14px; }
+  .slot-group:last-child { margin-bottom: 0; }
+  .slot-group-label {
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.16em;
+    color: var(--muted-soft);
+    margin-bottom: 8px;
+  }
+  .pills {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(82px, 1fr));
+    gap: 6px;
+  }
+  .pill {
+    appearance: none;
+    background: var(--surface);
+    border: 1px solid var(--border-strong);
+    border-radius: 7px;
+    padding: 9px 6px;
+    cursor: pointer;
+    font: 500 0.9rem var(--mono);
+    font-variant-numeric: tabular-nums;
+    color: var(--fg-soft);
+    transition: border-color .12s, background .12s, color .12s, transform .08s;
+  }
+  .pill:hover {
+    border-color: var(--accent);
+    color: var(--accent-deep);
+    background: var(--accent-tint);
+  }
+  .pill:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+  .pill.is-selected {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: var(--on-accent);
+  }
+
+  .pick-prompt {
+    color: var(--muted);
+    font-size: 0.9rem;
+    text-align: center;
+    padding: 32px 16px;
+    border: 1px dashed var(--border-strong);
+    border-radius: 8px;
+    background: var(--surface-2);
+  }
+  .pick-prompt svg {
+    width: 22px; height: 22px;
+    color: var(--muted-soft);
+    margin-bottom: 8px;
+    display: block;
+    margin-inline: auto;
+  }
+
+  /* -------- Form -------- */
+  .form-card .field { margin-bottom: 14px; }
+  .form-card label, .form-card .label {
+    display: block;
+    font-size: 0.78rem;
+    color: var(--muted);
+    margin-bottom: 6px;
+  }
+  .form-card label .req { color: var(--accent); margin-left: 2px; }
+  .form-card input[type="text"],
+  .form-card input[type="email"],
+  .form-card input[type="tel"],
+  .form-card input[type="number"],
+  .form-card input[type="date"],
+  .form-card select,
+  .form-card textarea {
+    width: 100%;
+    padding: 10px 12px;
+    border: 1px solid var(--border-strong);
+    border-radius: 8px;
+    background: var(--surface);
+    color: var(--fg);
+    transition: border-color .12s, box-shadow .12s;
+    font-size: 0.95rem;
+  }
+  .form-card input:focus,
+  .form-card select:focus,
+  .form-card textarea:focus {
+    outline: 0;
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px var(--accent-soft);
+  }
+  .form-card textarea { min-height: 92px; resize: vertical; }
+  .form-card .checkbox-row {
+    display: flex; align-items: flex-start; gap: 10px;
+    padding: 10px 0;
+  }
+  .form-card .checkbox-row input { margin-top: 3px; flex: none; }
+  .form-card .checkbox-row label { margin: 0; color: var(--fg-soft); font-size: 0.88rem; }
+
+  .summary-strip {
+    display: flex; align-items: center; gap: 10px;
+    padding: 11px 14px;
+    background: var(--accent-tint);
+    border: 1px solid color-mix(in oklab, var(--accent) 25%, var(--border));
+    border-radius: 9px;
+    margin-bottom: 18px;
+    font-size: 0.88rem;
+    color: var(--fg-soft);
+  }
+  .summary-strip svg { color: var(--accent); width: 16px; height: 16px; flex: none; }
+  .summary-strip .when { font-weight: 600; color: var(--fg); }
+  .summary-strip .when .num { font-family: var(--mono); }
+  .summary-strip .change {
+    margin-left: auto;
+    appearance: none; background: transparent; border: 0;
+    color: var(--accent); cursor: pointer; padding: 2px 4px;
+    font-size: 0.82rem;
+    border-radius: 4px;
+  }
+  .summary-strip .change:hover { background: var(--accent-soft); }
+
+  .form-actions {
+    display: flex; gap: 8px;
+    justify-content: flex-end;
+    margin-top: 22px;
+    padding-top: 18px;
+    border-top: 1px dashed var(--border-strong);
+  }
+
+  .btn {
+    appearance: none;
+    border: 1px solid var(--border-strong);
+    background: var(--surface);
+    color: var(--fg);
+    padding: 10px 18px;
+    border-radius: 8px;
+    font-size: 0.92rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: border-color .12s, background .12s, color .12s;
+    display: inline-flex; align-items: center; gap: 8px;
+  }
+  .btn:hover:not(:disabled) { border-color: var(--fg-soft); }
+  .btn:disabled { opacity: 0.55; cursor: not-allowed; }
+  .btn.primary {
+    background: var(--accent); color: var(--on-accent); border-color: var(--accent);
+  }
+  .btn.primary:hover:not(:disabled) { background: var(--accent-deep); border-color: var(--accent-deep); }
+  .btn.ghost { background: transparent; border-color: transparent; color: var(--muted); }
+  .btn.ghost:hover { background: var(--surface-2); color: var(--fg); border-color: var(--border); }
+
+  .error-banner {
+    padding: 11px 14px;
+    border: 1px solid color-mix(in oklab, var(--danger) 30%, var(--border));
+    background: var(--danger-soft);
+    color: var(--danger);
+    border-radius: 9px;
+    font-size: 0.88rem;
+    margin: 14px 0 0;
+    display: flex; align-items: flex-start; gap: 8px;
+  }
+  .error-banner svg { width: 16px; height: 16px; flex: none; margin-top: 2px; }
+  .field-error { color: var(--danger); font-size: 0.78rem; margin-top: 4px; }
+
+  /* -------- Success -------- */
+  .success {
+    display: flex; flex-direction: column; align-items: center;
+    text-align: center;
+    padding: 12px 8px 4px;
+  }
+  .success .check {
+    width: 56px; height: 56px;
+    border-radius: 50%;
+    background: var(--success-soft);
+    color: var(--success);
+    display: grid; place-items: center;
+    margin-bottom: 18px;
+    border: 1px solid color-mix(in oklab, var(--success) 25%, transparent);
+  }
+  .success .check svg { width: 28px; height: 28px; }
+  .success h2 {
+    margin: 0 0 6px;
+    font-size: 1.45rem; font-weight: 600;
+    letter-spacing: -0.024em;
+    color: var(--fg);
+  }
+  .success .lede {
+    color: var(--muted);
+    font-size: 0.94rem;
+    margin: 0 0 22px;
+    max-width: 440px;
+  }
+  .summary-box {
+    width: 100%;
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    padding: 18px 20px;
+    margin-bottom: 18px;
+    text-align: left;
+  }
+  .summary-box .row {
+    display: flex; justify-content: space-between; gap: 12px;
+    padding: 8px 0;
+    border-bottom: 1px dashed var(--border);
+    font-size: 0.9rem;
+  }
+  .summary-box .row:last-child { border-bottom: 0; }
+  .summary-box .row .k { color: var(--muted); }
+  .summary-box .row .v { color: var(--fg); font-weight: 500; text-align: right; }
+  .summary-box .row .v.num { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+  .summary-box .row .v.bid { font-family: var(--mono); font-size: 0.78rem; color: var(--muted); font-weight: 400; }
+
+  .add-cal {
+    width: 100%;
+    margin-bottom: 14px;
+  }
+  .add-cal-label {
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.16em;
+    color: var(--muted-soft);
+    margin-bottom: 8px;
+    text-align: left;
+  }
+  .add-cal-btns { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+  @media (max-width: 480px) {
+    .add-cal-btns { grid-template-columns: 1fr; }
+  }
+  .add-cal-btn {
+    appearance: none;
+    background: var(--surface);
+    border: 1px solid var(--border-strong);
+    border-radius: 8px;
+    padding: 10px 12px;
+    cursor: pointer;
+    color: var(--fg-soft);
+    font-size: 0.85rem;
+    display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+    text-decoration: none;
+    transition: border-color .12s, background .12s, color .12s;
+  }
+  .add-cal-btn:hover { border-color: var(--fg-soft); background: var(--surface-2); text-decoration: none; }
+  .add-cal-btn svg { width: 14px; height: 14px; }
+
+  .manage-link {
+    margin-top: 6px;
+    font-size: 0.88rem;
+    color: var(--accent);
+    display: inline-flex; align-items: center; gap: 4px;
+  }
+
+  /* -------- Loading + skeleton -------- */
+  .skeleton {
+    background: linear-gradient(90deg, var(--surface-2) 0%, var(--surface-3) 50%, var(--surface-2) 100%);
+    background-size: 200% 100%;
+    animation: shimmer 1.4s linear infinite;
+    border-radius: 6px;
+    color: transparent;
+  }
+  @keyframes shimmer { from { background-position: 200% 0; } to { background-position: -200% 0; } }
+  .center-msg {
+    text-align: center;
+    color: var(--muted);
+    padding: 48px 24px;
+    font-size: 0.94rem;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+  }
+</style>
+</head>
+<body>
+
+<div class="page" id="app">
+  <div class="center-msg">Wird geladen…</div>
+</div>
+
+<script>
+(() => {
+  /* ============================================================
+     Embed-mode: ?embed=1 (or being in an iframe) drops outer chrome
+     so the booking card flows nicely inside a parent container.
+     ============================================================ */
+  if (new URLSearchParams(location.search).get('embed') === '1' || window.parent !== window) {
+    document.body.classList.add('embed-mode');
+  }
+
+  /* ============================================================
+     Parent embed integration (preserved from previous book.html)
+     ============================================================ */
+  let parentOrigin = '*';
+  function postToParent(event, payload) {
+    if (window.parent === window) return;
+    try {
+      window.parent.postMessage({
+        source: 'qognical', event, payload,
+        iframeId: window.__qogIframeId || '',
+      }, parentOrigin);
+    } catch (e) { /* swallow */ }
+  }
+  window.addEventListener('message', (ev) => {
+    if (ev.data && ev.data.source === 'qognical-parent' && ev.data.event === 'init') {
+      window.__qogIframeId = ev.data.iframeId;
+      parentOrigin = ev.origin;
+    }
+  });
+  function reportHeight() {
+    const h = Math.max(document.body.scrollHeight, 480);
+    postToParent('embed.resize', { height: h });
+  }
+  const ro = new ResizeObserver(reportHeight);
+  ro.observe(document.body);
+
+  /* ============================================================
+     URL parsing + utilities
+     ============================================================ */
+  const path = location.pathname.split('/').filter(Boolean);
+  const [section, host, slug] = path;
+  if (section !== 'book' || !host || !slug) {
+    document.getElementById('app').innerHTML =
+      '<div class="center-msg">Ungültige Buchungs-URL.</div>';
+    return;
+  }
+
+  const browserTz = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
+  // Common timezones (Berlin first), plus the browser's own if unusual.
+  const COMMON_TZS = [
+    'Europe/Berlin', 'Europe/Vienna', 'Europe/Zurich', 'Europe/London',
+    'Europe/Paris', 'Europe/Madrid', 'Europe/Amsterdam',
+    'America/New_York', 'America/Los_Angeles', 'America/Chicago',
+    'Asia/Tokyo', 'Asia/Singapore', 'Australia/Sydney', 'UTC',
+  ];
+  function tzList() {
+    const seen = new Set();
+    const out = [];
+    for (const z of [browserTz, ...COMMON_TZS]) {
+      if (!z || seen.has(z)) continue;
+      seen.add(z); out.push(z);
+    }
+    return out;
+  }
+
+  const esc = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, c =>
+    ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'})[c]);
+  const escAttr = (s) => String(s == null ? '' : s).replace(/"/g, '&quot;');
+
+  const $ = (sel, r = document) => r.querySelector(sel);
+  const $$ = (sel, r = document) => Array.from(r.querySelectorAll(sel));
+
+  /* ============================================================
+     State
+     ============================================================ */
+  const state = {
+    eventType: null,
+    tz: browserTz,
+    // current visible month, anchored to the 1st
+    viewMonth: new Date(new Date().getFullYear(), new Date().getMonth(), 1),
+    // map "YYYY-MM-DD" -> [{start_utc, end_utc}, …]
+    slotsByDay: new Map(),
+    // map "YYYY-MM" -> Promise (de-dupes month fetches)
+    monthFetches: new Map(),
+    selectedDay: null,
+    selectedSlot: null,
+    monthLoading: false,
+    booking: null,
+  };
+
+  /* ============================================================
+     Formatters (always honour state.tz)
+     ============================================================ */
+  function fmtTime(iso) {
+    return new Intl.DateTimeFormat('de-DE', {
+      hour: '2-digit', minute: '2-digit', timeZone: state.tz,
+    }).format(new Date(iso));
+  }
+  function fmtDayLong(d) {
+    return new Intl.DateTimeFormat('de-DE', {
+      weekday: 'long', day: 'numeric', month: 'long', timeZone: state.tz,
+    }).format(d instanceof Date ? d : new Date(d));
+  }
+  function fmtMonth(d) {
+    return new Intl.DateTimeFormat('de-DE', {
+      month: 'long', year: 'numeric',
+    }).format(d);
+  }
+  // Build "YYYY-MM-DD" key in the chosen TZ (not in UTC).
+  function dayKey(iso) {
+    const d = new Date(iso);
+    const parts = new Intl.DateTimeFormat('en-CA', {
+      year: 'numeric', month: '2-digit', day: '2-digit', timeZone: state.tz,
+    }).formatToParts(d);
+    const get = (t) => (parts.find(p => p.type === t) || {}).value;
+    return `${get('year')}-${get('month')}-${get('day')}`;
+  }
+  function localDateKey(date) {
+    // for the calendar grid — uses civil date in browser/state TZ
+    const parts = new Intl.DateTimeFormat('en-CA', {
+      year: 'numeric', month: '2-digit', day: '2-digit', timeZone: state.tz,
+    }).formatToParts(date);
+    const get = (t) => (parts.find(p => p.type === t) || {}).value;
+    return `${get('year')}-${get('month')}-${get('day')}`;
+  }
+  function todayKey() { return localDateKey(new Date()); }
+
+  /* ============================================================
+     Branding (event-type brand_color overrides accent)
+     ============================================================ */
+  function applyBranding(et) {
+    if (!et) return;
+    if (et.brand_color) {
+      const root = document.documentElement.style;
+      root.setProperty('--accent', et.brand_color);
+      // Derive a soft / deep variant. Heuristic: same hue, transparency.
+      root.setProperty('--accent-soft', et.brand_color + '1f');
+      root.setProperty('--accent-tint', et.brand_color + '11');
+      root.setProperty('--accent-deep', shade(et.brand_color, -18));
+    }
+  }
+  // crude HSL-ish darken/lighten
+  function shade(hex, percent) {
+    const m = /^#?([0-9a-f]{6})$/i.exec(hex || '');
+    if (!m) return hex;
+    const n = parseInt(m[1], 16);
+    let r = (n >> 16) & 0xff, g = (n >> 8) & 0xff, b = n & 0xff;
+    const adj = (c) => Math.max(0, Math.min(255,
+      Math.round(c + (percent < 0 ? c : 255 - c) * (percent / 100))));
+    r = adj(r); g = adj(g); b = adj(b);
+    return '#' + [r, g, b].map(c => c.toString(16).padStart(2, '0')).join('');
+  }
+
+  /* ============================================================
+     Icon set (inline SVGs)
+     ============================================================ */
+  const ICON = {
+    clock: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>',
+    globe: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/></svg>',
+    teams: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="6" width="13" height="12" rx="2"/><path d="M16 10l5-3v10l-5-3z"/></svg>',
+    meet: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="6" width="13" height="12" rx="2"/><path d="M16 10l5-3v10l-5-3z"/></svg>',
+    pin: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s7-7.6 7-13a7 7 0 1 0-14 0c0 5.4 7 13 7 13Z"/><circle cx="12" cy="9" r="2.5"/></svg>',
+    phone: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M5 4h4l2 5-2.5 1.5a11 11 0 0 0 5 5L15 13l5 2v4a2 2 0 0 1-2 2A16 16 0 0 1 3 6a2 2 0 0 1 2-2Z"/></svg>',
+    chevL: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>',
+    chevR: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg>',
+    check: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 4 4 10-10"/></svg>',
+    alert: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 8v5M12 16h.01"/></svg>',
+    calend: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 9h18M8 3v4M16 3v4"/></svg>',
+    download: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12M7 10l5 5 5-5M5 21h14"/></svg>',
+    arrowR: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px;"><path d="M5 12h14M13 6l6 6-6 6"/></svg>',
+  };
+
+  function locationMeta(type) {
+    switch (type) {
+      case 'online_teams':       return { icon: ICON.teams, label: 'Microsoft Teams' };
+      case 'online_google_meet': return { icon: ICON.meet,  label: 'Google Meet' };
+      case 'online_zoom':        return { icon: ICON.meet,  label: 'Zoom' };
+      case 'online_jitsi':       return { icon: ICON.meet,  label: 'Jitsi Meet' };
+      case 'phone':              return { icon: ICON.phone, label: 'Telefonisch' };
+      case 'in_person':          return { icon: ICON.pin,   label: 'Vor Ort' };
+      default:                   return { icon: ICON.calend, label: type || 'Termin' };
+    }
+  }
+
+  /* ============================================================
+     Load event type
+     ============================================================ */
+  async function loadEventType() {
+    const res = await fetch(`/api/public/v1/event-types/${encodeURIComponent(host)}/${encodeURIComponent(slug)}`);
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      throw new Error((data.error && data.error.message) || 'Konnte den Event-Type nicht laden.');
+    }
+    return res.json();
+  }
+
+  /* ============================================================
+     Slot fetching (per month, cached)
+     ============================================================ */
+  function monthKey(d) {
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+  }
+  function isoDateStr(d) {
+    const y = d.getFullYear(), m = String(d.getMonth() + 1).padStart(2, '0'),
+          day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+  }
+  async function ensureMonthLoaded(viewDate) {
+    const k = monthKey(viewDate);
+    if (state.monthFetches.has(k)) return state.monthFetches.get(k);
+
+    // We fetch a window from "first visible cell" to "last visible cell" of the
+    // displayed grid, so dates that bleed into adjacent months are also covered.
+    const grid = monthGrid(viewDate);
+    const from = grid[0];
+    const to = new Date(grid[grid.length - 1]); to.setDate(to.getDate() + 1);
+    // Also ensure we never request past dates (API may reject):
+    const today = new Date(); today.setHours(0,0,0,0);
+    const fromBounded = from < today ? today : from;
+
+    const url = `/api/public/v1/event-types/${encodeURIComponent(host)}/${encodeURIComponent(slug)}/slots`
+      + `?from=${isoDateStr(fromBounded)}&to=${isoDateStr(to)}&timezone=${encodeURIComponent(state.tz)}`;
+    const p = fetch(url).then(async res => {
+      if (!res.ok) throw new Error('Fehler beim Laden der Termine.');
+      const data = await res.json();
+      for (const s of (data.slots || [])) {
+        const k = dayKey(s.start_utc);
+        if (!state.slotsByDay.has(k)) state.slotsByDay.set(k, []);
+        state.slotsByDay.get(k).push(s);
+      }
+      // ensure each day's slots are sorted
+      for (const arr of state.slotsByDay.values()) {
+        arr.sort((a, b) => a.start_utc < b.start_utc ? -1 : 1);
+      }
+    }).catch(err => {
+      state.monthFetches.delete(k);
+      throw err;
+    });
+    state.monthFetches.set(k, p);
+    return p;
+  }
+  function monthGrid(viewDate) {
+    // Returns 42 Date objects starting on Monday of the week of day 1
+    const first = new Date(viewDate.getFullYear(), viewDate.getMonth(), 1);
+    // JS: 0=Sun..6=Sat. We want Monday as start (0=Mon..6=Sun)
+    const dow = (first.getDay() + 6) % 7;
+    const start = new Date(first); start.setDate(first.getDate() - dow);
+    const out = [];
+    for (let i = 0; i < 42; i++) {
+      const d = new Date(start); d.setDate(start.getDate() + i);
+      out.push(d);
+    }
+    return out;
+  }
+
+  /* ============================================================
+     Render
+     ============================================================ */
+  function render() {
+    const et = state.eventType;
+    document.title = `${et.title} – {{ORG_NAME}}`;
+    const loc = locationMeta(et.location_type);
+    const hostName = et.host_name || '';
+    const initials = (hostName.trim().split(/\s+/).slice(0, 2).map(p => p[0] || '').join('').toUpperCase()) || '··';
+
+    document.getElementById('app').innerHTML = `
+      <div class="layout">
+        <aside class="info" aria-label="Termin-Informationen">
+          <div>
+            <div class="accent-mark"></div>
+            <div class="host-line">
+              <div class="avatar" aria-hidden="true">${esc(initials)}</div>
+              <div>
+                <div class="with">mit <strong>${esc(hostName || '—')}</strong></div>
+              </div>
+            </div>
+          </div>
+          <h1>${esc(et.title)}</h1>
+          ${et.description ? `
+            <div class="description" id="etDesc">${esc(et.description)}</div>
+            <button class="show-desc" id="showDesc" type="button">Beschreibung anzeigen</button>
+          ` : ''}
+          <div class="meta-list">
+            <div class="meta-row">
+              ${ICON.clock}
+              <span class="v num">${esc(et.duration_min)} Minuten</span>
+            </div>
+            <div class="meta-row">
+              ${loc.icon}
+              <span class="v">${esc(loc.label)}</span>
+            </div>
+            <div class="meta-row tz-select-wrap">
+              ${ICON.globe}
+              <select id="tzSelect" aria-label="Zeitzone wählen">
+                ${tzList().map(z => `<option value="${escAttr(z)}" ${z === state.tz ? 'selected' : ''}>${esc(z.replace('_', ' '))}</option>`).join('')}
+              </select>
+            </div>
+          </div>
+          <div class="powered">
+            <strong>{{ORG_NAME}}</strong>
+          </div>
+        </aside>
+
+        <section class="panel" id="panel" aria-live="polite">
+          <div id="step"></div>
+        </section>
+      </div>
+    `;
+
+    // Wire description toggle (mobile)
+    const showDesc = document.getElementById('showDesc');
+    if (showDesc) {
+      showDesc.addEventListener('click', () => {
+        const el = document.getElementById('etDesc');
+        const open = el.classList.toggle('expanded');
+        showDesc.textContent = open ? 'Beschreibung verbergen' : 'Beschreibung anzeigen';
+      });
+    }
+    // Wire TZ select
+    document.getElementById('tzSelect').addEventListener('change', (ev) => {
+      state.tz = ev.target.value;
+      // re-render selected step so times re-format
+      renderStep1();
+    });
+
+    renderStep1();
+  }
+
+  /* ---------- Step 1: date + time ---------- */
+  function renderStep1() {
+    const step = document.getElementById('step');
+    step.innerHTML = `
+      <div class="panel-head">
+        <div class="panel-title"><span class="step-no">1</span> Termin wählen</div>
+      </div>
+      <div class="cal-head">
+        <div class="month-label" id="monthLabel">${esc(fmtMonth(state.viewMonth))}</div>
+        <div class="cal-nav">
+          <button id="prevMonth" aria-label="Vorheriger Monat">${ICON.chevL}</button>
+          <button id="nextMonth" aria-label="Nächster Monat">${ICON.chevR}</button>
+        </div>
+      </div>
+      <div class="cal" id="cal" role="grid" aria-label="Datum wählen"></div>
+      <div class="slot-strip" id="slotStrip"></div>
+    `;
+    document.getElementById('prevMonth').addEventListener('click', () => shiftMonth(-1));
+    document.getElementById('nextMonth').addEventListener('click', () => shiftMonth(1));
+    drawCalendar();
+    renderSlotStrip();
+
+    // Keyboard nav on calendar grid
+    document.getElementById('cal').addEventListener('keydown', onCalKey);
+  }
+  function shiftMonth(delta) {
+    const nm = new Date(state.viewMonth.getFullYear(), state.viewMonth.getMonth() + delta, 1);
+    // never go before this month
+    const thisMonth = new Date(); thisMonth.setDate(1); thisMonth.setHours(0,0,0,0);
+    if (nm < thisMonth) return;
+    state.viewMonth = nm;
+    document.getElementById('monthLabel').textContent = fmtMonth(state.viewMonth);
+    drawCalendar();
+  }
+  function drawCalendar() {
+    const cal = document.getElementById('cal');
+    const dows = ['Mo','Di','Mi','Do','Fr','Sa','So'];
+    let html = dows.map(d => `<div class="dow">${d}</div>`).join('');
+
+    const grid = monthGrid(state.viewMonth);
+    const today = todayKey();
+    const curMonth = state.viewMonth.getMonth();
+    for (const d of grid) {
+      const dk = localDateKey(d);
+      const sameMonth = d.getMonth() === curMonth;
+      const isPast = dk < today;
+      const isToday = dk === today;
+      const hasSlots = (state.slotsByDay.get(dk) || []).length > 0;
+      // Past + non-month dates are unselectable. Same-month dates without
+      // known slots are tentative until the month loads — render them
+      // greyed but still selectable so the strip can report "keine Termine"
+      // if it really is empty. We'll disable after monthFetch resolves.
+      const monthLoaded = state.monthFetches.has(monthKey(state.viewMonth));
+      const isEmpty = sameMonth && !isPast && monthLoaded && !hasSlots;
+      const cls = [
+        'cal-day',
+        !sameMonth ? 'is-other' : '',
+        isPast ? 'is-past' : '',
+        isToday ? 'is-today' : '',
+        hasSlots ? 'has-slots' : '',
+        isEmpty ? 'is-empty' : '',
+        state.selectedDay === dk ? 'is-selected' : '',
+      ].filter(Boolean).join(' ');
+      const disabled = !sameMonth || isPast || isEmpty;
+      const slotCount = (state.slotsByDay.get(dk) || []).length;
+      html += `<button type="button"
+        class="${cls}"
+        data-day="${escAttr(dk)}"
+        role="gridcell"
+        aria-selected="${state.selectedDay === dk ? 'true' : 'false'}"
+        aria-label="${esc(fmtDayLong(d))}${hasSlots ? ', ' + slotCount + ' freie Termine' : ''}"
+        ${disabled ? 'disabled' : ''}>
+        ${d.getDate()}
+        ${hasSlots ? `<span class="tip">${slotCount} ${slotCount === 1 ? 'Termin' : 'Termine'}</span>` : ''}
+      </button>`;
+    }
+    cal.innerHTML = html;
+    cal.querySelectorAll('.cal-day:not([disabled]):not(.is-other)').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const dk = btn.dataset.day;
+        state.selectedDay = dk;
+        drawCalendar(); // re-render to mark selection
+        renderSlotStrip();
+        postToParent('date.selected', { date: dk });
+      });
+    });
+
+    // Lazy-load this month if not yet fetched
+    if (!state.monthFetches.has(monthKey(state.viewMonth))) {
+      ensureMonthLoaded(state.viewMonth)
+        .then(() => drawCalendar())
+        .catch(err => {
+          // surface the error inside the slot strip
+          const strip = document.getElementById('slotStrip');
+          if (strip) strip.innerHTML = errorBanner(err.message || 'Konnte Termine nicht laden.');
+        });
+    }
+  }
+  function onCalKey(ev) {
+    const focused = ev.target.closest('.cal-day');
+    if (!focused) return;
+    const dk = focused.dataset.day;
+    if (!dk) return;
+    const cur = new Date(dk + 'T00:00:00');
+    let next = null;
+    switch (ev.key) {
+      case 'ArrowLeft':  next = new Date(cur); next.setDate(cur.getDate() - 1); break;
+      case 'ArrowRight': next = new Date(cur); next.setDate(cur.getDate() + 1); break;
+      case 'ArrowUp':    next = new Date(cur); next.setDate(cur.getDate() - 7); break;
+      case 'ArrowDown':  next = new Date(cur); next.setDate(cur.getDate() + 7); break;
+      case 'Enter': case ' ':
+        ev.preventDefault();
+        focused.click();
+        return;
+      default: return;
+    }
+    ev.preventDefault();
+    const nk = isoDateStr(next);
+    // If we leave the month, shift view
+    if (next.getMonth() !== state.viewMonth.getMonth()) {
+      state.viewMonth = new Date(next.getFullYear(), next.getMonth(), 1);
+      const thisMonth = new Date(); thisMonth.setDate(1); thisMonth.setHours(0,0,0,0);
+      if (state.viewMonth < thisMonth) { state.viewMonth = thisMonth; return; }
+      document.getElementById('monthLabel').textContent = fmtMonth(state.viewMonth);
+      drawCalendar();
+    }
+    // Focus the new cell once it's rendered
+    requestAnimationFrame(() => {
+      const target = document.querySelector(`.cal-day[data-day="${nk}"]`);
+      if (target) target.focus();
+    });
+  }
+
+  function renderSlotStrip() {
+    const strip = document.getElementById('slotStrip');
+    if (!strip) return;
+    if (!state.selectedDay) {
+      strip.innerHTML = `
+        <div class="pick-prompt">
+          ${ICON.calend}
+          Bitte wähle ein Datum aus dem Kalender.
+        </div>`;
+      return;
+    }
+    const slots = state.slotsByDay.get(state.selectedDay) || [];
+    if (!slots.length) {
+      strip.innerHTML = `
+        <div class="slot-strip-head">
+          <div class="day-label">${esc(fmtDayLong(new Date(state.selectedDay + 'T12:00:00')))}</div>
+        </div>
+        <div class="pick-prompt">
+          ${ICON.alert}
+          An diesem Tag sind leider keine Termine frei.
+        </div>`;
+      return;
+    }
+
+    // Group by part of day (TZ-aware)
+    const groups = { morning: [], afternoon: [], evening: [] };
+    for (const s of slots) {
+      const h = Number(new Intl.DateTimeFormat('en-GB', {
+        hour: '2-digit', hour12: false, timeZone: state.tz,
+      }).format(new Date(s.start_utc)));
+      if (h < 12) groups.morning.push(s);
+      else if (h < 17) groups.afternoon.push(s);
+      else groups.evening.push(s);
+    }
+    const labels = [
+      ['morning',   'Vormittag'],
+      ['afternoon', 'Nachmittag'],
+      ['evening',   'Abend'],
+    ];
+    let html = `
+      <div class="slot-strip-head">
+        <div class="day-label">${esc(fmtDayLong(new Date(state.selectedDay + 'T12:00:00')))}</div>
+        <div>${slots.length} freie ${slots.length === 1 ? 'Zeit' : 'Zeiten'}</div>
+      </div>
+    `;
+    for (const [k, l] of labels) {
+      if (!groups[k].length) continue;
+      html += `
+        <div class="slot-group">
+          <div class="slot-group-label">${esc(l)}</div>
+          <div class="pills">${groups[k].map(s => `
+            <button type="button" class="pill" data-start="${escAttr(s.start_utc)}">${esc(fmtTime(s.start_utc))}</button>
+          `).join('')}</div>
+        </div>
+      `;
+    }
+    strip.innerHTML = html;
+    strip.querySelectorAll('.pill').forEach(btn => {
+      btn.addEventListener('click', () => {
+        state.selectedSlot = btn.dataset.start;
+        postToParent('slot.selected', { start_utc: state.selectedSlot });
+        renderStep2();
+      });
+    });
+  }
+
+  /* ---------- Step 2: form ---------- */
+  function renderStep2() {
+    const step = document.getElementById('step');
+    const et = state.eventType;
+    const start = state.selectedSlot;
+    const fields = (et.intake_schema && et.intake_schema.fields) || [];
+
+    step.innerHTML = `
+      <div class="panel-head">
+        <div class="panel-title"><span class="step-no">2</span> Deine Angaben</div>
+      </div>
+      <div class="summary-strip">
+        ${ICON.clock}
+        <span class="when">
+          <span>${esc(fmtDayLong(new Date(start)))}</span>,
+          <span class="num">${esc(fmtTime(start))}</span>
+        </span>
+        <button type="button" class="change" id="changeSlot">Ändern</button>
+      </div>
+      <form class="form-card" id="bookForm" novalidate>
+        <div class="field">
+          <label for="f_name">Name<span class="req">*</span></label>
+          <input id="f_name" type="text" autocomplete="name" required>
+          <div class="field-error" id="err_name" hidden></div>
+        </div>
+        <div class="field">
+          <label for="f_email">E-Mail<span class="req">*</span></label>
+          <input id="f_email" type="email" autocomplete="email" required>
+          <div class="field-error" id="err_email" hidden></div>
+        </div>
+        ${fields.map(renderIntakeField).join('')}
+        ${fields.some(f => f.key === 'notes') ? '' : `
+        <div class="field">
+          <label for="f_notes">Notizen <span style="color:var(--muted-soft);">(optional)</span></label>
+          <textarea id="f_notes" placeholder="Was sollte ${esc((et.host_name || 'dein Gegenüber').split(' ')[0] || 'er')} vor dem Gespräch wissen?"></textarea>
+        </div>`}
+        <div id="formError"></div>
+        <div class="form-actions">
+          <button type="button" class="btn ghost" id="backToCal">Zurück</button>
+          <button type="submit" class="btn primary" id="submitBtn">
+            Termin bestätigen ${ICON.arrowR}
+          </button>
+        </div>
+      </form>
+    `;
+    document.getElementById('changeSlot').addEventListener('click', () => {
+      state.selectedSlot = null;
+      renderStep1();
+    });
+    document.getElementById('backToCal').addEventListener('click', () => {
+      state.selectedSlot = null;
+      renderStep1();
+    });
+    document.getElementById('bookForm').addEventListener('submit', submit);
+    // Focus first field
+    requestAnimationFrame(() => document.getElementById('f_name').focus());
+  }
+
+  function renderIntakeField(f) {
+    const id = `f_intake_${f.key}`;
+    const req = f.required ? ' required' : '';
+    const star = f.required ? '<span class="req">*</span>' : '';
+    const label = `<label for="${escAttr(id)}">${esc(f.label || f.key)}${star}</label>`;
+    let inner = '';
+    switch (f.type) {
+      case 'textarea':
+        inner = `<textarea id="${escAttr(id)}"${req}></textarea>`;
+        break;
+      case 'select':
+        inner = `<select id="${escAttr(id)}"${req}>
+          <option value="">—</option>
+          ${(f.options || []).map(o => `<option>${esc(o)}</option>`).join('')}
+        </select>`;
+        break;
+      case 'multiselect':
+        inner = `<select id="${escAttr(id)}" multiple${req}>
+          ${(f.options || []).map(o => `<option>${esc(o)}</option>`).join('')}
+        </select>`;
+        break;
+      case 'checkbox':
+        return `<div class="field checkbox-row">
+          <input type="checkbox" id="${escAttr(id)}"${req}>
+          <label for="${escAttr(id)}">${esc(f.label || f.key)}${star}</label>
+        </div>`;
+      case 'tel':    inner = `<input type="tel" id="${escAttr(id)}"${req}>`; break;
+      case 'email':  inner = `<input type="email" id="${escAttr(id)}"${req}>`; break;
+      case 'number': inner = `<input type="number" id="${escAttr(id)}"${req}>`; break;
+      case 'date':   inner = `<input type="date" id="${escAttr(id)}"${req}>`; break;
+      default:       inner = `<input type="text" id="${escAttr(id)}"${req}>`; break;
+    }
+    return `<div class="field">${label}${inner}</div>`;
+  }
+
+  function collectIntake() {
+    const out = {};
+    const fields = (state.eventType.intake_schema && state.eventType.intake_schema.fields) || [];
+    for (const f of fields) {
+      const el = document.getElementById(`f_intake_${f.key}`);
+      if (!el) continue;
+      if (f.type === 'checkbox') out[f.key] = el.checked;
+      else if (f.type === 'multiselect') out[f.key] = [...el.selectedOptions].map(o => o.value);
+      else if (f.type === 'number') {
+        const v = el.value.trim();
+        if (v !== '') out[f.key] = Number(v);
+      } else if (el.value !== '') out[f.key] = el.value;
+    }
+    return out;
+  }
+
+  function errorBanner(msg) {
+    return `<div class="error-banner">${ICON.alert}<div>${esc(msg)}</div></div>`;
+  }
+
+  async function submit(ev) {
+    ev.preventDefault();
+    const name = document.getElementById('f_name').value.trim();
+    const email = document.getElementById('f_email').value.trim();
+    let ok = true;
+    function setErr(id, msg) {
+      const el = document.getElementById(id);
+      el.textContent = msg; el.hidden = !msg;
+      if (msg) ok = false;
+    }
+    setErr('err_name',  name ? '' : 'Bitte gib deinen Namen ein.');
+    setErr('err_email', /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) ? '' : 'Bitte gib eine gültige E-Mail-Adresse ein.');
+    if (!ok) return;
+
+    const notesEl = document.getElementById('f_notes');
+    const notes = notesEl ? notesEl.value.trim() : '';
+    const intake = collectIntake();
+    if (notes) intake.notes = notes;
+
+    const payload = {
+      event_type_id: state.eventType.id,
+      start_utc: state.selectedSlot,
+      invitee: { name, email, timezone: state.tz },
+      intake_data: intake,
+    };
+    const btn = document.getElementById('submitBtn');
+    btn.disabled = true;
+    const errEl = document.getElementById('formError');
+    errEl.innerHTML = '';
+
+    try {
+      const res = await fetch('/api/public/v1/bookings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        errEl.innerHTML = errorBanner((data.error && data.error.message) || 'Buchung fehlgeschlagen. Bitte versuche es erneut.');
+        postToParent('booking.failed', { error_code: data.error && data.error.code });
+        btn.disabled = false;
+        return;
+      }
+      if (data.checkout_url) {
+        postToParent('payment.redirecting', { provider: 'stripe' });
+        try { window.top.location.href = data.checkout_url; }
+        catch (_) { window.open(data.checkout_url, '_blank'); }
+        return;
+      }
+      postToParent('booking.successful', { booking_id: data.booking_id });
+      state.booking = { ...data, name, email, start_utc: state.selectedSlot };
+      renderStep3();
+    } catch (e) {
+      errEl.innerHTML = errorBanner('Netzwerkfehler. Bitte versuche es erneut.');
+      btn.disabled = false;
+    }
+  }
+
+  /* ---------- Step 3: success ---------- */
+  function renderStep3() {
+    const step = document.getElementById('step');
+    const b = state.booking;
+    const et = state.eventType;
+    const start = new Date(b.start_utc);
+    const endMs = start.getTime() + (et.duration_min || 30) * 60_000;
+    const end = new Date(endMs);
+    const pendingApproval = b.status === 'pending_approval';
+    const loc = locationMeta(et.location_type);
+
+    const icsHref = makeIcsHref({
+      title: et.title,
+      description: et.description || '',
+      start, end,
+      organizer: et.host_name || '',
+      location: loc.label,
+    });
+    const googleHref = makeGoogleCalHref({
+      title: et.title, description: et.description || '',
+      start, end, location: loc.label,
+    });
+    const outlookHref = makeOutlookHref({
+      title: et.title, description: et.description || '',
+      start, end, location: loc.label,
+    });
+
+    step.innerHTML = `
+      <div class="success">
+        <div class="check" aria-hidden="true">${ICON.check}</div>
+        <h2>${pendingApproval ? 'Anfrage gesendet' : 'Termin bestätigt'}</h2>
+        <p class="lede">
+          ${pendingApproval
+            ? `Wir haben deine Anfrage an <strong>${esc(et.host_name || '')}</strong> weitergeleitet. Du erhältst eine E-Mail an <strong>${esc(b.email)}</strong>, sobald sie bestätigt wird.`
+            : `Eine Bestätigung wurde an <strong>${esc(b.email)}</strong> gesendet. Wir freuen uns auf dich.`}
+        </p>
+        <div class="summary-box">
+          <div class="row"><span class="k">Termin</span><span class="v">${esc(et.title)}</span></div>
+          <div class="row"><span class="k">Wann</span><span class="v num">${esc(fmtDayLong(start))}, ${esc(fmtTime(start))} – ${esc(fmtTime(end))}</span></div>
+          <div class="row"><span class="k">Mit</span><span class="v">${esc(et.host_name || '—')}</span></div>
+          <div class="row"><span class="k">Format</span><span class="v">${esc(loc.label)}</span></div>
+          <div class="row"><span class="k">Zeitzone</span><span class="v num">${esc(state.tz)}</span></div>
+          ${b.booking_id ? `<div class="row"><span class="k">Buchungs-Nr.</span><span class="v bid">${esc(b.booking_id)}</span></div>` : ''}
+        </div>
+        ${pendingApproval ? '' : `
+          <div class="add-cal">
+            <div class="add-cal-label">Zum Kalender hinzufügen</div>
+            <div class="add-cal-btns">
+              <a class="add-cal-btn" href="${escAttr(icsHref)}" download="${escAttr((et.slug || 'termin') + '.ics')}">
+                ${ICON.download} ICS herunterladen
+              </a>
+              <a class="add-cal-btn" href="${escAttr(googleHref)}" target="_blank" rel="noopener">
+                ${ICON.calend} Google Cal
+              </a>
+              <a class="add-cal-btn" href="${escAttr(outlookHref)}" target="_blank" rel="noopener">
+                ${ICON.calend} Outlook
+              </a>
+            </div>
+          </div>
+        `}
+        ${b.manage_url ? `<a class="manage-link" href="${escAttr(b.manage_url)}">Termin verwalten ${ICON.arrowR}</a>` : ''}
+      </div>
+    `;
+  }
+
+  /* ============================================================
+     Calendar add-helpers
+     ============================================================ */
+  function fmtICSDate(d) {
+    // UTC, basic format: 20260603T140000Z
+    const p = (n) => String(n).padStart(2, '0');
+    return d.getUTCFullYear() + p(d.getUTCMonth() + 1) + p(d.getUTCDate()) + 'T'
+         + p(d.getUTCHours()) + p(d.getUTCMinutes()) + p(d.getUTCSeconds()) + 'Z';
+  }
+  function escIcs(s) {
+    return String(s || '').replace(/\\/g, '\\\\').replace(/\n/g, '\\n').replace(/,/g, '\\,').replace(/;/g, '\\;');
+  }
+  function makeIcsHref({ title, description, start, end, organizer, location }) {
+    const uid = (state.booking && state.booking.booking_id) || (Date.now() + '@qognical');
+    const lines = [
+      'BEGIN:VCALENDAR',
+      'VERSION:2.0',
+      'PRODID:-//qognical//Booking//DE',
+      'CALSCALE:GREGORIAN',
+      'METHOD:PUBLISH',
+      'BEGIN:VEVENT',
+      `UID:${uid}`,
+      `DTSTAMP:${fmtICSDate(new Date())}`,
+      `DTSTART:${fmtICSDate(start)}`,
+      `DTEND:${fmtICSDate(end)}`,
+      `SUMMARY:${escIcs(title)}`,
+      `DESCRIPTION:${escIcs(description)}`,
+      `LOCATION:${escIcs(location)}`,
+      organizer ? `ORGANIZER;CN=${escIcs(organizer)}:mailto:invalid@invalid.local` : '',
+      'END:VEVENT',
+      'END:VCALENDAR',
+    ].filter(Boolean).join('\r\n');
+    return 'data:text/calendar;charset=utf-8,' + encodeURIComponent(lines);
+  }
+  function makeGoogleCalHref({ title, description, start, end, location }) {
+    const p = new URLSearchParams({
+      action: 'TEMPLATE',
+      text: title,
+      dates: `${fmtICSDate(start)}/${fmtICSDate(end)}`,
+      details: description,
+      location: location,
+    });
+    return 'https://calendar.google.com/calendar/render?' + p.toString();
+  }
+  function makeOutlookHref({ title, description, start, end, location }) {
+    const p = new URLSearchParams({
+      path: '/calendar/action/compose',
+      rru: 'addevent',
+      subject: title,
+      body: description,
+      startdt: start.toISOString(),
+      enddt: end.toISOString(),
+      location: location,
+    });
+    return 'https://outlook.live.com/calendar/0/deeplink/compose?' + p.toString();
+  }
+
+  /* ============================================================
+     Boot
+     ============================================================ */
+  async function boot() {
+    try {
+      state.eventType = await loadEventType();
+      applyBranding(state.eventType);
+      render();
+      postToParent('embed.ready', { version: '2.0.0' });
+    } catch (e) {
+      document.getElementById('app').innerHTML =
+        `<div class="panel" style="max-width:520px;margin:40px auto;">
+          ${errorBanner(e.message || 'Unerwarteter Fehler.')}
+        </div>`;
+    }
+  }
+  boot();
+})();
+</script>
+</body>
+</html>

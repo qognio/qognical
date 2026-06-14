@@ -1,0 +1,269 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<title>qognical — form builder</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root {
+    --bg: #f6f7fb; --fg: #131316; --muted: #6b7280;
+    --card: #ffffff; --border: #e5e7eb;
+    --accent: #2B5ADC; --accent-fg: #ffffff;
+    --danger: #b91c1c;
+    --radius: 8px;
+  }
+  * { box-sizing: border-box; }
+  body { font: 15px/1.5 system-ui, sans-serif; background: var(--bg); color: var(--fg);
+         margin: 0; padding: 24px; }
+  .wrap { max-width: 920px; margin: 0 auto; }
+  h1 { margin-top: 0; }
+  .card { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius);
+          padding: 16px; margin-block: 12px; }
+  label { display: block; font-weight: 500; margin: 6px 0 4px; }
+  input, select, textarea { width: 100%; padding: 8px; border: 1px solid var(--border);
+                            border-radius: 6px; font: inherit; }
+  button { font: inherit; padding: 8px 14px; border-radius: 6px; cursor: pointer;
+           border: 1px solid var(--border); background: white; }
+  button.primary { background: var(--accent); color: var(--accent-fg); border: 0; }
+  button.danger { color: var(--danger); border-color: var(--danger); background: white; }
+  .row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .field-card { background: #fafbff; border: 1px solid var(--border); border-radius: 6px;
+                padding: 12px; margin-block: 10px; }
+  .field-head { display: flex; align-items: center; gap: 8px; }
+  .field-head .grip { color: var(--muted); cursor: grab; }
+  .pill { display: inline-block; padding: 2px 8px; border-radius: 999px;
+          font-size: 12px; background: #eef0f7; color: var(--muted); }
+  .muted { color: var(--muted); }
+  .error { color: var(--danger); }
+  pre { background: #0f1116; color: #e6e7ec; padding: 12px; border-radius: 8px;
+        font-size: 12px; overflow-x: auto; }
+  .toolbar { display: flex; gap: 8px; margin: 12px 0; }
+</style>
+</head>
+<body>
+<div class="wrap">
+<h1>Intake-Form Builder</h1>
+<div id="app">Wird geladen…</div>
+</div>
+<script>
+(() => {
+  // The form-builder is a thin client over PocketBase's auth + collections.
+  // It needs a superuser session — taken from localStorage or freshly
+  // logged in via the auth-with-password endpoint.
+  const $ = sel => document.querySelector(sel);
+  const params = new URLSearchParams(location.search);
+  const etId = params.get('event_type_id');
+  const TYPES = ['text','textarea','select','multiselect','checkbox','tel','email','number','date'];
+
+  function authToken() { return localStorage.getItem('qog_admin_token') || ''; }
+  function setAuthToken(t) { localStorage.setItem('qog_admin_token', t); }
+
+  async function jfetch(url, opts) {
+    const r = await fetch(url, {
+      ...(opts || {}),
+      headers: {'Content-Type': 'application/json',
+                ...(authToken() ? {'Authorization': 'Bearer ' + authToken()} : {}),
+                ...((opts && opts.headers) || {})},
+    });
+    const data = await r.json().catch(() => ({}));
+    if (!r.ok) throw Object.assign(new Error('http'), {status: r.status, body: data});
+    return data;
+  }
+
+  async function ensureAuth() {
+    if (authToken()) {
+      // Verify token still valid
+      try {
+        await jfetch('/api/collections/_superusers/auth-refresh', {method: 'POST'});
+        return true;
+      } catch (e) { localStorage.removeItem('qog_admin_token'); }
+    }
+    renderLogin();
+    return false;
+  }
+
+  function renderLogin() {
+    $('#app').innerHTML = `
+      <div class="card">
+        <h2>Admin-Login</h2>
+        <label>E-Mail <input id="lu" type="email"></label>
+        <label>Passwort <input id="lp" type="password"></label>
+        <button class="primary" id="li">Login</button>
+        <div id="le" class="error"></div>
+      </div>`;
+    $('#li').addEventListener('click', async () => {
+      try {
+        const r = await jfetch('/api/collections/_superusers/auth-with-password', {
+          method: 'POST',
+          body: JSON.stringify({identity: $('#lu').value, password: $('#lp').value}),
+        });
+        setAuthToken(r.token);
+        loadEventType();
+      } catch (e) {
+        $('#le').textContent = 'Login fehlgeschlagen';
+      }
+    });
+  }
+
+  function newField() {
+    return {key: 'field_' + Math.random().toString(36).slice(2,6),
+            label: '', type: 'text', required: false};
+  }
+
+  function renderBuilder(et, schema) {
+    const fields = (schema && schema.fields) || [];
+    $('#app').innerHTML = `
+      <div class="card">
+        <div class="row">
+          <div><span class="muted">Event-Type</span><br><strong>${escape(et.title)}</strong></div>
+          <div><span class="muted">Slug</span><br><code>${escape(et.slug)}</code></div>
+        </div>
+      </div>
+      <div class="toolbar">
+        <button id="addField">+ Feld hinzufügen</button>
+        <button id="save" class="primary">Speichern</button>
+        <button id="logout">Logout</button>
+        <span id="saveStatus" class="muted"></span>
+      </div>
+      <div id="fields"></div>
+      <h3>JSON-Vorschau</h3>
+      <pre id="preview"></pre>`;
+    function renderFields() {
+      const root = $('#fields');
+      root.innerHTML = '';
+      fields.forEach((f, i) => {
+        const c = document.createElement('div');
+        c.className = 'field-card';
+        c.innerHTML = `
+          <div class="field-head">
+            <span class="pill">${i+1}</span>
+            <strong>${escape(f.label || '(ohne Label)')}</strong>
+            <span class="pill">${f.type}</span>
+            <span style="margin-left:auto"></span>
+            <button data-act="up">↑</button>
+            <button data-act="dn">↓</button>
+            <button data-act="rm" class="danger">Entfernen</button>
+          </div>
+          <div class="row" style="margin-top:8px">
+            <div>
+              <label>Key (snake_case, eindeutig)</label>
+              <input data-bind="key" value="${escapeAttr(f.key)}">
+            </div>
+            <div>
+              <label>Label</label>
+              <input data-bind="label" value="${escapeAttr(f.label || '')}">
+            </div>
+          </div>
+          <div class="row" style="margin-top:8px">
+            <div>
+              <label>Typ</label>
+              <select data-bind="type">
+                ${TYPES.map(t => `<option value="${t}" ${f.type===t?'selected':''}>${t}</option>`).join('')}
+              </select>
+            </div>
+            <div>
+              <label>Required</label>
+              <select data-bind="required">
+                <option value="false" ${!f.required?'selected':''}>nein</option>
+                <option value="true"  ${f.required?'selected':''}>ja</option>
+              </select>
+            </div>
+          </div>
+          ${needsOptions(f.type) ? `
+            <label>Optionen (eine pro Zeile)</label>
+            <textarea data-bind="options" rows="3">${escape((f.options||[]).join('\n'))}</textarea>
+          ` : ''}
+          ${['text','textarea','tel'].includes(f.type) ? `
+            <label>Max-Length</label>
+            <input data-bind="max_length" type="number" min="0" value="${f.max_length||''}">
+          ` : ''}
+          ${f.type === 'number' ? `
+            <div class="row">
+              <div><label>Min</label><input data-bind="min" type="number" value="${f.min ?? ''}"></div>
+              <div><label>Max</label><input data-bind="max" type="number" value="${f.max ?? ''}"></div>
+            </div>
+          ` : ''}
+        `;
+        c.querySelectorAll('[data-bind]').forEach(el => {
+          el.addEventListener('input', () => bindChange(i, el.dataset.bind, el));
+        });
+        c.querySelectorAll('button[data-act]').forEach(b => {
+          b.addEventListener('click', () => act(i, b.dataset.act));
+        });
+        root.appendChild(c);
+      });
+      refreshPreview();
+    }
+    function bindChange(i, key, el) {
+      let v = el.value;
+      if (el.tagName === 'SELECT' && (v === 'true' || v === 'false')) v = v === 'true';
+      if (key === 'options') v = v.split('\n').map(s => s.trim()).filter(Boolean);
+      if (['max_length','min','max'].includes(key)) v = v === '' ? undefined : Number(v);
+      if (v === undefined) delete fields[i][key];
+      else fields[i][key] = v;
+      refreshPreview();
+    }
+    function act(i, what) {
+      if (what === 'rm') fields.splice(i, 1);
+      if (what === 'up' && i > 0) [fields[i-1], fields[i]] = [fields[i], fields[i-1]];
+      if (what === 'dn' && i < fields.length - 1) [fields[i+1], fields[i]] = [fields[i], fields[i+1]];
+      renderFields();
+    }
+    function refreshPreview() {
+      $('#preview').textContent = JSON.stringify({fields}, null, 2);
+    }
+    function needsOptions(t) { return t === 'select' || t === 'multiselect'; }
+    $('#addField').addEventListener('click', () => { fields.push(newField()); renderFields(); });
+    $('#save').addEventListener('click', save);
+    $('#logout').addEventListener('click', () => { localStorage.clear(); location.reload(); });
+    async function save() {
+      try {
+        $('#saveStatus').textContent = 'Speichere…';
+        await jfetch(`/api/collections/event_types/records/${etId}`, {
+          method: 'PATCH',
+          body: JSON.stringify({intake_schema: {fields}}),
+        });
+        $('#saveStatus').textContent = '✓ gespeichert';
+        setTimeout(() => $('#saveStatus').textContent = '', 3000);
+      } catch (e) {
+        const msg = (e.body && (e.body.message || JSON.stringify(e.body.data))) || 'Fehler';
+        $('#saveStatus').textContent = '✗ ' + msg;
+      }
+    }
+    renderFields();
+  }
+
+  async function loadEventType() {
+    if (!etId) {
+      $('#app').innerHTML = `<div class="card"><h2>Welcher Event-Type?</h2>
+        <p class="muted">Diese Seite mit <code>?event_type_id=&lt;id&gt;</code> öffnen.
+        Die ID findest du in der PocketBase Admin-UI unter <code>Collections → event_types</code>.</p></div>`;
+      return;
+    }
+    try {
+      const et = await jfetch(`/api/collections/event_types/records/${etId}`);
+      let schema = et.intake_schema;
+      if (typeof schema === 'string') try { schema = JSON.parse(schema); } catch {}
+      if (!schema || typeof schema !== 'object') schema = {fields: []};
+      renderBuilder(et, schema);
+    } catch (e) {
+      if (e.status === 401 || e.status === 403) {
+        localStorage.removeItem('qog_admin_token');
+        renderLogin();
+        return;
+      }
+      $('#app').innerHTML = `<div class="card error">Fehler: ${escape(e.message)}</div>`;
+    }
+  }
+
+  function escape(s) {
+    return String(s == null ? '' : s).replace(/[&<>"]/g,
+      c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'})[c]);
+  }
+  function escapeAttr(s) { return String(s == null ? '' : s).replace(/"/g, '&quot;'); }
+
+  ensureAuth().then(ok => { if (ok) loadEventType(); });
+})();
+</script>
+</body>
+</html>

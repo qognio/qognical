@@ -1,0 +1,19 @@
+services:
+  qognical:
+    image: ghcr.io/qognio/qognical:latest
+    # build: .   # uncomment to build locally from this directory
+    restart: unless-stopped
+    env_file: .env
+    volumes:
+      - pb_data:/pb_data
+    ports:
+      - "8090:8090"
+    healthcheck:
+      test: ["CMD", "/qognical", "healthcheck", "--dir=/pb_data"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+volumes:
+  pb_data:

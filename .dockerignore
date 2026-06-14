@@ -1,0 +1,14 @@
+.git/
+.github/
+*.md
+docs/
+.env
+.env.local
+.env.*
+pb_data/
+/qognical
+/bin/
+/dist/
+*.log
+.idea/
+.vscode/

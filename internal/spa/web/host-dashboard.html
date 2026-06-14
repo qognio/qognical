@@ -1,0 +1,1764 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<title>{{ORG_NAME}} — Host-Dashboard</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  /* ------------------------------------------------------------------
+     Design tokens — editorial, calm, Linear/Notion-adjacent.
+     Single accent (#2b5adc), warm-grey neutrals, generous whitespace,
+     monospace numerics for stats, dotted hairlines instead of shadows.
+     ------------------------------------------------------------------ */
+  :root {
+    --bg: #fafaf8;
+    --surface: #ffffff;
+    --surface-2: #f4f4ef;
+    --surface-3: #ebebe5;
+    --fg: #16161a;
+    --fg-soft: #2c2c33;
+    --muted: #6a6a72;
+    --muted-soft: #9a9aa2;
+    --border: #e8e8e3;
+    --border-strong: #d6d6d0;
+    --accent: #2b5adc;
+    --accent-deep: #1f44b0;
+    --accent-soft: #eef2fd;
+    --accent-tint: #f6f8fe;
+    --success: #197a52;
+    --success-soft: #e6f3ec;
+    --warn: #a4690d;
+    --warn-soft: #fbf2e0;
+    --danger: #b91c1c;
+    --danger-soft: #fdecec;
+    --radius: 8px;
+    --radius-lg: 12px;
+    --mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
+    --sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    --sidebar-w: 248px;
+    --header-h: 60px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0c0c0f;
+      --surface: #131318;
+      --surface-2: #1a1a20;
+      --surface-3: #22222a;
+      --fg: #f3f3f0;
+      --fg-soft: #d8d8d4;
+      --muted: #8b8b94;
+      --muted-soft: #5a5a63;
+      --border: #22222a;
+      --border-strong: #32323c;
+      --accent: #7493ef;
+      --accent-deep: #94aff6;
+      --accent-soft: #1a2342;
+      --accent-tint: #131a30;
+      --success: #4ec491;
+      --success-soft: #142319;
+      --warn: #d39a4a;
+      --warn-soft: #2a200f;
+      --danger: #f17171;
+      --danger-soft: #2a1414;
+    }
+  }
+  *, *::before, *::after { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  html { color-scheme: light dark; }
+  body {
+    font: 14.5px/1.55 var(--sans);
+    color: var(--fg);
+    background: var(--bg);
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+    font-feature-settings: "ss01", "cv11";
+    min-height: 100vh;
+  }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; text-underline-offset: 3px; text-decoration-thickness: 1px; }
+  button { font: inherit; color: inherit; }
+  input, select, textarea { font: inherit; color: inherit; }
+  .num { font-family: var(--mono); font-variant-numeric: tabular-nums; letter-spacing: -0.02em; }
+
+  /* -------- Layout shell -------- */
+  .shell {
+    display: grid;
+    grid-template-columns: var(--sidebar-w) 1fr;
+    min-height: 100vh;
+  }
+  .sidebar {
+    border-right: 1px solid var(--border);
+    background: var(--surface);
+    padding: 22px 16px 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    position: sticky;
+    top: 0;
+    height: 100vh;
+  }
+  .brand {
+    display: flex; align-items: center; gap: 10px;
+    padding: 6px 8px 18px;
+    border-bottom: 1px dashed var(--border-strong);
+    margin-bottom: 12px;
+  }
+  .brand .dot {
+    width: 22px; height: 22px;
+    border-radius: 6px;
+    background: var(--accent);
+    display: grid; place-items: center;
+    color: #fff; font-weight: 700; font-size: 11px;
+    letter-spacing: 0.04em;
+  }
+  .brand .name { font-weight: 600; letter-spacing: -0.01em; font-size: 0.95rem; }
+  .brand .name small { display: block; color: var(--muted); font-weight: 400; font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.16em; margin-top: 2px; }
+
+  .nav-group-label {
+    color: var(--muted-soft);
+    font-size: 0.68rem;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    padding: 14px 10px 6px;
+  }
+  .nav-item {
+    appearance: none;
+    background: transparent;
+    border: 0;
+    width: 100%;
+    text-align: left;
+    padding: 8px 10px;
+    border-radius: 7px;
+    color: var(--fg-soft);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 0.9rem;
+    transition: background .12s, color .12s;
+    position: relative;
+  }
+  .nav-item:hover { background: var(--surface-2); color: var(--fg); }
+  .nav-item.is-active {
+    background: var(--accent-soft);
+    color: var(--accent-deep);
+    font-weight: 500;
+  }
+  .nav-item .icon {
+    width: 16px; height: 16px; flex: none;
+    color: currentColor;
+    opacity: 0.85;
+  }
+  .nav-item .kbd {
+    margin-left: auto;
+    font: 11px/1 var(--mono);
+    color: var(--muted-soft);
+    padding: 2px 5px;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+  }
+
+  .sidebar-foot {
+    margin-top: auto;
+    padding-top: 14px;
+    border-top: 1px dashed var(--border-strong);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .avatar {
+    width: 32px; height: 32px;
+    border-radius: 50%;
+    background: var(--surface-3);
+    color: var(--fg-soft);
+    display: grid; place-items: center;
+    font-weight: 600; font-size: 0.78rem;
+    flex: none;
+  }
+  .sidebar-foot .who { min-width: 0; flex: 1; }
+  .sidebar-foot .who .nm { font-size: 0.85rem; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .sidebar-foot .who .em { font-size: 0.75rem; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .signout {
+    appearance: none; background: transparent; border: 0; cursor: pointer;
+    color: var(--muted); padding: 6px;
+    border-radius: 6px;
+  }
+  .signout:hover { background: var(--surface-2); color: var(--danger); }
+
+  /* -------- Main column -------- */
+  .main { min-width: 0; }
+  .topbar {
+    height: var(--header-h);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 0 32px;
+    border-bottom: 1px solid var(--border);
+    background: color-mix(in oklab, var(--bg) 80%, transparent);
+    backdrop-filter: blur(10px);
+    position: sticky; top: 0; z-index: 10;
+  }
+  .crumbs {
+    display: flex; align-items: center; gap: 10px;
+    color: var(--muted);
+    font-size: 0.85rem;
+  }
+  .crumbs .sep { color: var(--muted-soft); }
+  .crumbs .now { color: var(--fg); font-weight: 500; }
+  .topbar .right { display: flex; align-items: center; gap: 12px; color: var(--muted); font-size: 0.82rem; }
+  .topbar .tz {
+    font-family: var(--mono);
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    padding: 4px 8px;
+    border-radius: 6px;
+    font-size: 0.78rem;
+  }
+  .menu-btn {
+    display: none;
+    appearance: none; background: var(--surface); border: 1px solid var(--border);
+    padding: 6px 8px; border-radius: 6px; cursor: pointer;
+  }
+
+  .view {
+    padding: 36px 32px 64px;
+    max-width: 1120px;
+  }
+  .page-head {
+    display: flex; align-items: flex-end; justify-content: space-between; gap: 24px;
+    margin-bottom: 28px;
+    padding-bottom: 18px;
+    border-bottom: 1px dashed var(--border-strong);
+  }
+  .page-head h1 {
+    margin: 0;
+    font-size: 1.85rem;
+    font-weight: 600;
+    letter-spacing: -0.028em;
+    line-height: 1.1;
+  }
+  .page-head .lede {
+    margin: 6px 0 0;
+    color: var(--muted);
+    font-size: 0.92rem;
+  }
+  .page-head .actions { display: flex; gap: 8px; flex-wrap: wrap; }
+
+  /* -------- Buttons / forms -------- */
+  .btn {
+    appearance: none;
+    border: 1px solid var(--border-strong);
+    background: var(--surface);
+    color: var(--fg);
+    padding: 8px 14px;
+    border-radius: 7px;
+    font-size: 0.88rem;
+    font-weight: 500;
+    cursor: pointer;
+    display: inline-flex; align-items: center; gap: 6px;
+    transition: border-color .12s, background .12s, color .12s;
+  }
+  .btn:hover { border-color: var(--fg-soft); }
+  .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+  .btn.primary {
+    background: var(--accent); color: #fff; border-color: var(--accent);
+  }
+  .btn.primary:hover { background: var(--accent-deep); border-color: var(--accent-deep); }
+  .btn.ghost { background: transparent; border-color: transparent; color: var(--muted); }
+  .btn.ghost:hover { background: var(--surface-2); color: var(--fg); border-color: var(--border); }
+  .btn.danger { color: var(--danger); border-color: color-mix(in oklab, var(--danger) 35%, var(--border)); }
+  .btn.danger:hover { background: var(--danger-soft); }
+  .btn.sm { padding: 5px 9px; font-size: 0.8rem; border-radius: 6px; }
+  .btn .ic { width: 14px; height: 14px; }
+
+  .field { display: block; margin-bottom: 14px; }
+  .field > label, .label {
+    display: block;
+    font-size: 0.78rem;
+    color: var(--muted);
+    margin-bottom: 6px;
+    letter-spacing: 0.01em;
+  }
+  .field input, .field select, .field textarea, .input {
+    width: 100%;
+    padding: 9px 11px;
+    border: 1px solid var(--border-strong);
+    border-radius: 7px;
+    background: var(--surface);
+    color: var(--fg);
+    transition: border-color .12s, box-shadow .12s;
+    font-size: 0.92rem;
+  }
+  .field input:focus, .field select:focus, .field textarea:focus, .input:focus {
+    outline: 0;
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px var(--accent-soft);
+  }
+  .field-row {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    gap: 12px;
+  }
+  .switch {
+    --w: 36px; --h: 20px;
+    position: relative; display: inline-block; width: var(--w); height: var(--h);
+    flex: none;
+  }
+  .switch input { opacity: 0; width: 0; height: 0; }
+  .switch span {
+    position: absolute; inset: 0;
+    background: var(--surface-3);
+    border-radius: 999px;
+    transition: background .15s;
+    cursor: pointer;
+  }
+  .switch span::after {
+    content: "";
+    position: absolute;
+    top: 2px; left: 2px;
+    width: 16px; height: 16px;
+    background: #fff;
+    border-radius: 50%;
+    transition: transform .18s cubic-bezier(.4,1.6,.6,1);
+    box-shadow: 0 1px 2px rgba(0,0,0,0.25);
+  }
+  .switch input:checked + span { background: var(--accent); }
+  .switch input:checked + span::after { transform: translateX(16px); }
+
+  /* -------- Cards / panels -------- */
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    overflow: hidden;
+  }
+  .card-head {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 14px 18px;
+    border-bottom: 1px solid var(--border);
+  }
+  .card-head h2 {
+    margin: 0; font-size: 0.95rem; font-weight: 600;
+    letter-spacing: -0.01em;
+  }
+  .card-head .meta { color: var(--muted); font-size: 0.8rem; }
+  .card-body { padding: 18px; }
+  .card-body.flush { padding: 0; }
+
+  /* -------- Overview KPI cards -------- */
+  .kpis {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 14px;
+    margin-bottom: 28px;
+  }
+  .kpi {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    padding: 18px 20px;
+    position: relative;
+    overflow: hidden;
+  }
+  .kpi .label {
+    font-size: 0.74rem;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.16em;
+    margin: 0;
+  }
+  .kpi .v {
+    font-family: var(--mono);
+    font-variant-numeric: tabular-nums;
+    font-size: 2.4rem;
+    font-weight: 500;
+    letter-spacing: -0.04em;
+    line-height: 1.05;
+    margin: 8px 0 4px;
+    color: var(--fg);
+  }
+  .kpi .delta {
+    font-size: 0.78rem;
+    color: var(--muted);
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .kpi .delta.up { color: var(--success); }
+  .kpi .delta.down { color: var(--danger); }
+  .kpi .accent-bar {
+    position: absolute;
+    top: 0; left: 0; height: 3px;
+    width: 24px;
+    background: var(--accent);
+    border-bottom-right-radius: 3px;
+  }
+
+  /* -------- Two-column layout for overview lower section -------- */
+  .split-2 {
+    display: grid;
+    grid-template-columns: 1.6fr 1fr;
+    gap: 18px;
+  }
+  @media (max-width: 940px) {
+    .split-2 { grid-template-columns: 1fr; }
+  }
+
+  /* -------- Lists / tables -------- */
+  .list { display: flex; flex-direction: column; }
+  .list-row {
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    align-items: center;
+    gap: 14px;
+    padding: 14px 18px;
+    border-bottom: 1px solid var(--border);
+  }
+  .list-row:last-child { border-bottom: 0; }
+  .list-row:hover { background: var(--surface-2); }
+  .list-row .when {
+    font-family: var(--mono);
+    font-size: 0.84rem;
+    color: var(--muted);
+    text-align: right;
+    min-width: 96px;
+  }
+  .list-row .when strong { display: block; color: var(--fg); font-weight: 500; }
+  .list-row .who { min-width: 0; }
+  .list-row .who .nm { font-weight: 500; }
+  .list-row .who .et { color: var(--muted); font-size: 0.85rem; }
+
+  .table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.9rem;
+  }
+  .table th, .table td {
+    padding: 12px 18px;
+    text-align: left;
+    border-bottom: 1px solid var(--border);
+  }
+  .table th {
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    letter-spacing: 0.14em;
+    color: var(--muted);
+    font-weight: 500;
+    background: var(--surface-2);
+  }
+  .table tbody tr:hover { background: var(--surface-2); }
+  .table .row-actions { text-align: right; white-space: nowrap; }
+  .table .row-actions .btn { margin-left: 4px; }
+
+  /* -------- Status chips -------- */
+  .chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 2px 8px;
+    border-radius: 999px;
+    font-size: 0.74rem;
+    font-weight: 500;
+    border: 1px solid var(--border-strong);
+    color: var(--muted);
+    background: var(--surface-2);
+  }
+  .chip::before {
+    content: "";
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    background: currentColor;
+    opacity: 0.7;
+  }
+  .chip.ok { color: var(--success); background: var(--success-soft); border-color: color-mix(in oklab, var(--success) 30%, transparent); }
+  .chip.warn { color: var(--warn); background: var(--warn-soft); border-color: color-mix(in oklab, var(--warn) 30%, transparent); }
+  .chip.err { color: var(--danger); background: var(--danger-soft); border-color: color-mix(in oklab, var(--danger) 30%, transparent); }
+  .chip.muted { color: var(--muted); }
+
+  /* -------- Mini-stats panel -------- */
+  .ministats { display: flex; flex-direction: column; }
+  .ms-row {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 12px 18px;
+    border-bottom: 1px solid var(--border);
+  }
+  .ms-row:last-child { border-bottom: 0; }
+  .ms-row .lbl { color: var(--muted); font-size: 0.86rem; }
+  .ms-row .val { font-family: var(--mono); font-size: 0.92rem; font-variant-numeric: tabular-nums; }
+
+  /* -------- URL copy pill -------- */
+  .url-cell {
+    display: inline-flex; align-items: center; gap: 6px;
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 3px 4px 3px 8px;
+    font: 12px var(--mono);
+    color: var(--muted);
+    max-width: 280px;
+  }
+  .url-cell .u { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+  .copy-btn {
+    appearance: none; background: transparent; border: 0;
+    color: var(--muted); cursor: pointer; padding: 3px 5px;
+    border-radius: 4px;
+    display: inline-flex; align-items: center;
+  }
+  .copy-btn:hover { background: var(--surface-3); color: var(--fg); }
+  .copy-btn.ok { color: var(--success); }
+
+  /* -------- Availability week grid -------- */
+  .week {
+    display: flex; flex-direction: column;
+  }
+  .week-day {
+    display: grid;
+    grid-template-columns: 80px 1fr auto;
+    align-items: flex-start;
+    gap: 16px;
+    padding: 14px 18px;
+    border-bottom: 1px solid var(--border);
+  }
+  .week-day:last-child { border-bottom: 0; }
+  .week-day .name {
+    font-weight: 600;
+    font-size: 0.92rem;
+    padding-top: 8px;
+    color: var(--fg-soft);
+  }
+  .slots-col { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+  .slot-row {
+    display: grid;
+    grid-template-columns: 1fr auto 1fr auto;
+    gap: 8px;
+    align-items: center;
+  }
+  .slot-row input[type="time"] {
+    padding: 7px 9px;
+    border: 1px solid var(--border-strong);
+    border-radius: 6px;
+    background: var(--surface);
+    font: 13px var(--mono);
+    width: 100%;
+  }
+  .slot-row .dash { color: var(--muted-soft); text-align: center; }
+  .slot-row .x {
+    background: transparent; border: 0; cursor: pointer;
+    color: var(--muted); padding: 6px;
+    border-radius: 5px;
+  }
+  .slot-row .x:hover { color: var(--danger); background: var(--danger-soft); }
+  .closed-tag {
+    padding: 7px 11px;
+    color: var(--muted);
+    font-size: 0.85rem;
+    background: var(--surface-2);
+    border: 1px dashed var(--border-strong);
+    border-radius: 6px;
+    display: inline-block;
+  }
+  .week-day .add {
+    padding-top: 6px;
+  }
+
+  /* -------- Integration cards -------- */
+  .integrations {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+    gap: 14px;
+  }
+  .integration {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+  }
+  .integration .head {
+    display: flex; align-items: center; gap: 12px;
+  }
+  .integration .logo {
+    width: 40px; height: 40px;
+    border-radius: 9px;
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    display: grid; place-items: center;
+    color: var(--fg-soft);
+    flex: none;
+  }
+  .integration h3 {
+    margin: 0; font-size: 0.98rem; font-weight: 600;
+    letter-spacing: -0.005em;
+  }
+  .integration .sub { font-size: 0.8rem; color: var(--muted); }
+  .integration .body { color: var(--muted); font-size: 0.86rem; }
+  .integration .meta {
+    display: flex; justify-content: space-between; align-items: center;
+    font-size: 0.78rem; color: var(--muted);
+    border-top: 1px dashed var(--border-strong);
+    padding-top: 12px; margin-top: auto;
+  }
+  .integration .actions { display: flex; gap: 6px; }
+
+  /* -------- Modal -------- */
+  .modal-backdrop {
+    position: fixed; inset: 0;
+    background: color-mix(in oklab, #000 35%, transparent);
+    backdrop-filter: blur(2px);
+    display: grid; place-items: center;
+    padding: 24px;
+    z-index: 100;
+    animation: fadeIn .15s ease-out;
+  }
+  @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+  .modal {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    width: 100%;
+    max-width: 560px;
+    max-height: calc(100vh - 48px);
+    overflow: auto;
+    animation: pop .18s cubic-bezier(.4,1.6,.6,1);
+  }
+  @keyframes pop { from { transform: scale(.96); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+  .modal-head {
+    padding: 18px 22px;
+    border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  .modal-head h2 { margin: 0; font-size: 1.05rem; font-weight: 600; letter-spacing: -0.01em; }
+  .modal-body { padding: 20px 22px; }
+  .modal-foot {
+    padding: 14px 22px;
+    border-top: 1px solid var(--border);
+    background: var(--surface-2);
+    display: flex; justify-content: flex-end; gap: 8px;
+  }
+  .modal .close {
+    appearance: none; border: 0; background: transparent; cursor: pointer;
+    color: var(--muted); padding: 4px;
+    border-radius: 6px;
+  }
+  .modal .close:hover { color: var(--fg); background: var(--surface-2); }
+
+  /* -------- Toast -------- */
+  .toast-stack {
+    position: fixed;
+    right: 22px; bottom: 22px;
+    z-index: 200;
+    display: flex; flex-direction: column; gap: 8px;
+    pointer-events: none;
+  }
+  .toast {
+    pointer-events: auto;
+    background: var(--fg);
+    color: var(--bg);
+    padding: 10px 14px;
+    border-radius: 8px;
+    font-size: 0.85rem;
+    box-shadow: 0 8px 24px -8px rgba(0,0,0,0.25);
+    animation: slideUp .2s ease-out;
+    max-width: 360px;
+  }
+  .toast.err { background: var(--danger); color: #fff; }
+  .toast.ok { background: var(--success); color: #fff; }
+  @keyframes slideUp { from { transform: translateY(8px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+
+  /* -------- Banner / error -------- */
+  .banner {
+    padding: 12px 16px;
+    border: 1px solid color-mix(in oklab, var(--danger) 30%, var(--border));
+    background: var(--danger-soft);
+    color: var(--danger);
+    border-radius: var(--radius-lg);
+    font-size: 0.88rem;
+    margin-bottom: 20px;
+    display: flex; align-items: flex-start; gap: 10px;
+  }
+
+  /* -------- Empty + skeleton -------- */
+  .empty {
+    padding: 36px 24px;
+    text-align: center;
+    color: var(--muted);
+    font-size: 0.9rem;
+  }
+  .empty strong { color: var(--fg-soft); display: block; font-weight: 500; margin-bottom: 4px; font-size: 0.95rem; }
+  .shimmer {
+    display: inline-block;
+    height: 1em;
+    border-radius: 4px;
+    background: linear-gradient(90deg, var(--surface-2) 0%, var(--surface-3) 50%, var(--surface-2) 100%);
+    background-size: 200% 100%;
+    animation: shimmer 1.4s linear infinite;
+    color: transparent;
+    min-width: 60px;
+  }
+  @keyframes shimmer { from { background-position: 200% 0; } to { background-position: -200% 0; } }
+  .kpi.loading .v { background: linear-gradient(90deg, var(--surface-2) 0%, var(--surface-3) 50%, var(--surface-2) 100%);
+    background-size: 200% 100%; animation: shimmer 1.4s linear infinite; color: transparent; border-radius: 6px; display: inline-block; min-width: 80px; }
+
+  /* -------- Mobile -------- */
+  @media (max-width: 820px) {
+    .shell { grid-template-columns: 1fr; }
+    .sidebar {
+      position: fixed;
+      inset: 0 auto 0 0;
+      width: var(--sidebar-w);
+      transform: translateX(-100%);
+      transition: transform .22s ease;
+      z-index: 50;
+      box-shadow: 0 0 40px -10px rgba(0,0,0,0.18);
+    }
+    .sidebar.open { transform: translateX(0); }
+    .menu-btn { display: inline-flex; align-items: center; gap: 8px; }
+    .view { padding: 24px 16px 60px; }
+    .topbar { padding: 0 16px; }
+    .page-head { flex-direction: column; align-items: flex-start; }
+    .week-day { grid-template-columns: 1fr; }
+    .week-day .name { padding-top: 0; }
+    .scrim {
+      position: fixed; inset: 0; background: rgba(0,0,0,0.35);
+      z-index: 49; opacity: 0; pointer-events: none; transition: opacity .15s;
+    }
+    .scrim.open { opacity: 1; pointer-events: auto; }
+  }
+  @media (max-width: 480px) {
+    .table th:nth-child(3), .table td:nth-child(3) { display: none; } /* hide URL on tiny */
+  }
+</style>
+</head>
+<body>
+
+<div class="shell">
+  <aside class="sidebar" id="sidebar">
+    <div class="brand">
+      <div class="dot">XR</div>
+      <div class="name">
+        {{ORG_NAME}}
+        <small>Host-Konsole</small>
+      </div>
+    </div>
+
+    <div class="nav-group-label">Verwaltung</div>
+    <button class="nav-item" data-route="overview">
+      <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/></svg>
+      Übersicht
+    </button>
+    <button class="nav-item" data-route="event-types">
+      <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 9h18M8 3v4M16 3v4"/></svg>
+      Event-Types
+    </button>
+    <button class="nav-item" data-route="availability">
+      <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
+      Verfügbarkeit
+    </button>
+    <button class="nav-item" data-route="integrations">
+      <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M10 14 4 20M14 10l6-6"/><rect x="2" y="14" width="8" height="8" rx="2"/><rect x="14" y="2" width="8" height="8" rx="2"/><path d="M10 14h4v-4"/></svg>
+      Integrationen
+    </button>
+
+    <div class="sidebar-foot">
+      <div class="avatar" id="meAvatar">··</div>
+      <div class="who">
+        <div class="nm" id="meName">Wird geladen…</div>
+        <div class="em" id="meEmail">&nbsp;</div>
+      </div>
+      <button class="signout" id="signout" title="Abmelden">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M15 4h4a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-4"/><path d="M10 17l-5-5 5-5M5 12h11"/></svg>
+      </button>
+    </div>
+  </aside>
+
+  <div class="scrim" id="scrim"></div>
+
+  <main class="main">
+    <header class="topbar">
+      <div style="display:flex; align-items:center; gap:12px;">
+        <button class="menu-btn" id="menuBtn" aria-label="Menü">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
+        </button>
+        <div class="crumbs">
+          <span>Konsole</span>
+          <span class="sep">/</span>
+          <span class="now" id="crumbNow">Übersicht</span>
+        </div>
+      </div>
+      <div class="right">
+        <span class="tz" id="tzPill">UTC</span>
+      </div>
+    </header>
+
+    <div class="view" id="view">
+      <div class="page-head">
+        <div>
+          <h1 id="pageTitle"><span class="shimmer">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span></h1>
+          <p class="lede" id="pageLede"><span class="shimmer">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span></p>
+        </div>
+      </div>
+      <p style="color: var(--muted);">Wird geladen…</p>
+    </div>
+  </main>
+</div>
+
+<div id="modalRoot"></div>
+<div class="toast-stack" id="toasts"></div>
+
+<script>
+(() => {
+  /* ============================================================
+     Auth + API client
+     ============================================================ */
+  const AUTH_KEY = 'pb_host_auth';
+  function getAuth() {
+    try { return JSON.parse(localStorage.getItem(AUTH_KEY) || 'null'); }
+    catch (e) { return null; }
+  }
+  function clearAuth() { localStorage.removeItem(AUTH_KEY); }
+  function goLogin() {
+    clearAuth();
+    location.replace('/host/login');
+  }
+  const auth = getAuth();
+  if (!auth || !auth.token) {
+    goLogin();
+    return;
+  }
+
+  async function api(path, opts = {}) {
+    const headers = Object.assign({
+      'Authorization': 'Bearer ' + auth.token,
+      'Accept': 'application/json',
+    }, opts.headers || {});
+    if (opts.body && !(opts.body instanceof FormData)) {
+      headers['Content-Type'] = headers['Content-Type'] || 'application/json';
+      if (typeof opts.body !== 'string') opts.body = JSON.stringify(opts.body);
+    }
+    const res = await fetch(path, Object.assign({}, opts, { headers }));
+    if (res.status === 401) { goLogin(); throw new Error('Nicht authentifiziert'); }
+    let data = null;
+    if (res.status !== 204) {
+      try { data = await res.json(); } catch (_) { data = null; }
+    }
+    if (!res.ok) {
+      const msg = (data && data.error && data.error.message) || (data && data.message) || `HTTP ${res.status}`;
+      const err = new Error(msg);
+      err.status = res.status; err.data = data;
+      throw err;
+    }
+    return data;
+  }
+
+  /* ============================================================
+     Utilities
+     ============================================================ */
+  const $ = (sel, root = document) => root.querySelector(sel);
+  const $$ = (sel, root = document) => Array.from(root.querySelectorAll(sel));
+  const esc = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'})[c]);
+  const escAttr = (s) => String(s == null ? '' : s).replace(/"/g, '&quot;');
+  const tz = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
+  $('#tzPill').textContent = tz;
+
+  const fmtDate = (d) => new Intl.DateTimeFormat('de-DE', { day: '2-digit', month: 'short' }).format(new Date(d));
+  const fmtDay = (d) => new Intl.DateTimeFormat('de-DE', { weekday: 'short' }).format(new Date(d));
+  const fmtTime = (d) => new Intl.DateTimeFormat('de-DE', { hour: '2-digit', minute: '2-digit' }).format(new Date(d));
+  const fmtRel = (iso) => {
+    if (!iso) return '—';
+    const ms = Date.now() - new Date(iso).getTime();
+    const s = Math.round(ms / 1000);
+    if (s < 60) return 'gerade eben';
+    if (s < 3600) return `vor ${Math.round(s/60)} min`;
+    if (s < 86400) return `vor ${Math.round(s/3600)} h`;
+    return `vor ${Math.round(s/86400)} Tagen`;
+  };
+  const initials = (s) => {
+    const parts = String(s || '').trim().split(/\s+/).slice(0, 2);
+    return parts.map(p => p[0] || '').join('').toUpperCase() || '··';
+  };
+
+  function toast(message, kind = '') {
+    const wrap = $('#toasts');
+    const el = document.createElement('div');
+    el.className = 'toast' + (kind ? ' ' + kind : '');
+    el.textContent = message;
+    wrap.appendChild(el);
+    setTimeout(() => {
+      el.style.transition = 'opacity .2s';
+      el.style.opacity = '0';
+      setTimeout(() => el.remove(), 250);
+    }, 3200);
+  }
+
+  function showBanner(message) {
+    return `<div class="banner">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 8v5M12 16h.01"/></svg>
+      <div>${esc(message)}</div>
+    </div>`;
+  }
+
+  /* ============================================================
+     Modal helper
+     ============================================================ */
+  function openModal({ title, body, footer }) {
+    const root = $('#modalRoot');
+    root.innerHTML = `
+      <div class="modal-backdrop" data-close="1">
+        <div class="modal" role="dialog" aria-labelledby="mTitle">
+          <div class="modal-head">
+            <h2 id="mTitle">${esc(title)}</h2>
+            <button class="close" data-close="1" aria-label="Schließen">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
+            </button>
+          </div>
+          <div class="modal-body">${body || ''}</div>
+          ${footer ? `<div class="modal-foot">${footer}</div>` : ''}
+        </div>
+      </div>`;
+    const closeFn = () => { root.innerHTML = ''; document.removeEventListener('keydown', onKey); };
+    const onKey = (e) => { if (e.key === 'Escape') closeFn(); };
+    document.addEventListener('keydown', onKey);
+    root.querySelectorAll('[data-close]').forEach(el => {
+      el.addEventListener('click', (e) => {
+        if (e.target === el) closeFn();
+      });
+    });
+    return { close: closeFn, root: root.firstElementChild };
+  }
+
+  function confirmDialog({ title, message, confirmLabel = 'Bestätigen', danger = false }) {
+    return new Promise(resolve => {
+      const m = openModal({
+        title,
+        body: `<p style="color:var(--muted);margin:0;">${esc(message)}</p>`,
+        footer: `<button class="btn ghost" data-act="cancel">Abbrechen</button>
+                 <button class="btn ${danger ? 'danger' : 'primary'}" data-act="ok">${esc(confirmLabel)}</button>`,
+      });
+      m.root.querySelector('[data-act="cancel"]').addEventListener('click', () => { m.close(); resolve(false); });
+      m.root.querySelector('[data-act="ok"]').addEventListener('click', () => { m.close(); resolve(true); });
+    });
+  }
+
+  /* ============================================================
+     Sidebar / routing
+     ============================================================ */
+  const ROUTES = {
+    'overview':      { title: 'Übersicht',      lede: 'Aktivität, kommende Termine und Verbindungen auf einen Blick.', render: renderOverview },
+    'event-types':   { title: 'Event-Types',    lede: 'Termin-Vorlagen mit Dauer, Vorlauf und Branding.',                 render: renderEventTypes },
+    'availability':  { title: 'Verfügbarkeit',  lede: 'Wochenplan und Ausnahmen für Urlaub, Feiertage und Sondertermine.', render: renderAvailability },
+    'integrations':  { title: 'Integrationen',  lede: 'Kalender und Videokonferenz-Tools verbinden und synchronisieren.', render: renderIntegrations },
+  };
+
+  function setActiveRoute(name) {
+    $$('.nav-item').forEach(b => b.classList.toggle('is-active', b.dataset.route === name));
+    const r = ROUTES[name] || ROUTES.overview;
+    $('#crumbNow').textContent = r.title;
+    document.title = `${r.title} — Host-Konsole`;
+  }
+
+  function currentRoute() {
+    const h = (location.hash || '').replace(/^#\/?/, '');
+    return ROUTES[h] ? h : 'overview';
+  }
+
+  async function navigate() {
+    const name = currentRoute();
+    setActiveRoute(name);
+    closeSidebar();
+    const r = ROUTES[name];
+    const view = $('#view');
+    view.innerHTML = `
+      <div class="page-head">
+        <div>
+          <h1 id="pageTitle">${esc(r.title)}</h1>
+          <p class="lede">${esc(r.lede)}</p>
+        </div>
+        <div class="actions" id="pageActions"></div>
+      </div>
+      <div id="pageBody"><p style="color:var(--muted);">Wird geladen…</p></div>
+    `;
+    try {
+      await r.render($('#pageBody'), $('#pageActions'));
+    } catch (e) {
+      $('#pageBody').innerHTML = showBanner(e.message || 'Fehler beim Laden.');
+    }
+  }
+
+  $$('.nav-item').forEach(b => {
+    b.addEventListener('click', () => {
+      location.hash = '#/' + b.dataset.route;
+    });
+  });
+  window.addEventListener('hashchange', navigate);
+
+  function openSidebar() { $('#sidebar').classList.add('open'); $('#scrim').classList.add('open'); }
+  function closeSidebar() { $('#sidebar').classList.remove('open'); $('#scrim').classList.remove('open'); }
+  $('#menuBtn').addEventListener('click', openSidebar);
+  $('#scrim').addEventListener('click', closeSidebar);
+
+  $('#signout').addEventListener('click', async () => {
+    if (!await confirmDialog({
+      title: 'Abmelden?',
+      message: 'Du wirst zum Login zurück geleitet. Lokale Einstellungen bleiben erhalten.',
+      confirmLabel: 'Abmelden',
+    })) return;
+    clearAuth();
+    location.replace('/host/login');
+  });
+
+  /* ============================================================
+     User profile (sidebar)
+     ============================================================ */
+  async function loadMe() {
+    try {
+      const me = await api('/api/host/me');
+      $('#meName').textContent = me.name || me.email || '—';
+      $('#meEmail').textContent = me.email || '';
+      $('#meAvatar').textContent = initials(me.name || me.email || '');
+    } catch (e) {
+      // 401 already redirects; just leave fallback
+      if (auth.record) {
+        $('#meName').textContent = auth.record.name || auth.record.email || '—';
+        $('#meEmail').textContent = auth.record.email || '';
+        $('#meAvatar').textContent = initials(auth.record.name || auth.record.email || '');
+      }
+    }
+  }
+
+  /* ============================================================
+     OVERVIEW
+     ============================================================ */
+  async function renderOverview(body, actions) {
+    body.innerHTML = `
+      <div class="kpis" id="kpis">
+        ${[['Heute',''], ['Diese Woche',''], ['Diesen Monat',''], ['Aktive Event-Types','']].map(([l]) => `
+          <div class="kpi loading">
+            <span class="accent-bar"></span>
+            <div class="label">${esc(l)}</div>
+            <div class="v">000</div>
+            <div class="delta">&nbsp;</div>
+          </div>`).join('')}
+      </div>
+      <div class="split-2">
+        <div class="card">
+          <div class="card-head">
+            <h2>Nächste Termine</h2>
+            <span class="meta">5 anstehend</span>
+          </div>
+          <div class="card-body flush" id="upcoming">
+            <div class="empty"><span class="shimmer">&nbsp;&nbsp;&nbsp;&nbsp;</span></div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-head"><h2>Verbindungen</h2></div>
+          <div class="card-body flush ministats" id="connStats">
+            <div class="ms-row"><span class="lbl"><span class="shimmer">&nbsp;&nbsp;&nbsp;&nbsp;</span></span><span class="val">—</span></div>
+          </div>
+        </div>
+      </div>
+    `;
+
+    const [stats, bookings] = await Promise.all([
+      api('/api/host/stats').catch(e => ({ _err: e.message })),
+      api('/api/host/bookings?from=' + encodeURIComponent(new Date().toISOString())).catch(e => ({ _err: e.message })),
+    ]);
+
+    if (stats && !stats._err) {
+      const ks = $('#kpis');
+      const cards = [
+        { label: 'Heute', value: stats.bookings_today ?? 0, delta: null },
+        { label: 'Diese Woche', value: stats.bookings_week ?? 0, delta: null },
+        { label: 'Diesen Monat', value: stats.bookings_month ?? 0, delta: null },
+        { label: 'Aktive Event-Types', value: stats.active_event_types ?? 0, delta: null },
+      ];
+      ks.innerHTML = cards.map(c => `
+        <div class="kpi">
+          <span class="accent-bar"></span>
+          <div class="label">${esc(c.label)}</div>
+          <div class="v">${esc(c.value)}</div>
+          <div class="delta muted">${c.delta == null ? '—' : esc(c.delta)}</div>
+        </div>
+      `).join('');
+
+      const conn = (stats.integrations || []);
+      const cs = $('#connStats');
+      if (!conn.length) {
+        cs.innerHTML = `<div class="empty">Noch keine Integrationen.</div>`;
+      } else {
+        cs.innerHTML = conn.map(c => `
+          <div class="ms-row">
+            <span class="lbl">${esc(providerLabel(c.provider))}</span>
+            <span class="val">
+              ${c.connected
+                ? `<span class="chip ok">Verbunden</span>`
+                : `<span class="chip muted">Nicht verbunden</span>`}
+              ${c.last_sync_at ? `<span style="margin-left:8px;color:var(--muted-soft);font-family:var(--mono);">${esc(fmtRel(c.last_sync_at))}</span>` : ''}
+            </span>
+          </div>
+        `).join('');
+      }
+    } else {
+      $('#kpis').innerHTML = showBanner(stats._err || 'Statistik nicht verfügbar.');
+      $('#connStats').innerHTML = `<div class="empty">—</div>`;
+    }
+
+    const up = $('#upcoming');
+    if (bookings && bookings._err) {
+      up.innerHTML = `<div class="empty">${esc(bookings._err)}</div>`;
+    } else {
+      const list = (bookings || []).slice(0, 5);
+      if (!list.length) {
+        up.innerHTML = `<div class="empty"><strong>Alles ruhig.</strong>Keine bevorstehenden Termine in den nächsten Tagen.</div>`;
+      } else {
+        up.innerHTML = `<div class="list">${list.map(b => `
+          <div class="list-row">
+            <div class="when">
+              <strong>${esc(fmtDate(b.start_utc))}</strong>
+              ${esc(fmtTime(b.start_utc))}
+            </div>
+            <div class="who">
+              <div class="nm">${esc(b.guest_name || b.guest_email || '—')}</div>
+              <div class="et">${esc(b.event_type_title || '')}</div>
+            </div>
+            <div>${bookingStatusChip(b.status)}</div>
+          </div>
+        `).join('')}</div>`;
+      }
+    }
+  }
+
+  function providerLabel(p) {
+    return ({
+      msgraph: 'Microsoft 365',
+      google: 'Google Calendar',
+      jitsi: 'Jitsi Meet',
+      zoom: 'Zoom',
+    })[p] || p;
+  }
+
+  function bookingStatusChip(s) {
+    if (s === 'confirmed' || s === 'booked') return `<span class="chip ok">Bestätigt</span>`;
+    if (s === 'pending_approval' || s === 'pending') return `<span class="chip warn">Wartet</span>`;
+    if (s === 'cancelled') return `<span class="chip err">Storniert</span>`;
+    if (s === 'completed') return `<span class="chip muted">Abgeschlossen</span>`;
+    return `<span class="chip muted">${esc(s || '—')}</span>`;
+  }
+
+  /* ============================================================
+     EVENT-TYPES
+     ============================================================ */
+  async function renderEventTypes(body, actions) {
+    actions.innerHTML = `<button class="btn primary" id="newEt">
+      <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+      Neuer Event-Type
+    </button>`;
+    $('#newEt').addEventListener('click', () => openEventTypeEditor());
+
+    body.innerHTML = `<div class="card"><div class="card-body" style="color:var(--muted);">Wird geladen…</div></div>`;
+    const items = await api('/api/host/event-types');
+    if (!items.length) {
+      body.innerHTML = `<div class="card"><div class="empty">
+        <strong>Noch keine Event-Types.</strong>
+        Lege dein erstes Termin-Format an — z. B. „30 Min Beratung" oder „Demo-Call".
+      </div></div>`;
+      return;
+    }
+    const hostSlug = (auth.record && (auth.record.username || auth.record.email)) || '';
+    body.innerHTML = `
+      <div class="card">
+        <div class="card-body flush">
+          <table class="table">
+            <thead>
+              <tr>
+                <th style="width:34%">Titel</th>
+                <th style="width:90px">Dauer</th>
+                <th>Öffentliche URL</th>
+                <th style="width:90px">Status</th>
+                <th class="row-actions">Aktionen</th>
+              </tr>
+            </thead>
+            <tbody>${items.map(it => {
+              const url = `${location.origin}/book/${encodeURIComponent(hostSlug)}/${encodeURIComponent(it.slug)}`;
+              return `<tr data-id="${escAttr(it.id)}">
+                <td>
+                  <div style="display:flex;align-items:center;gap:10px;">
+                    <span style="width:8px;height:32px;border-radius:3px;background:${escAttr(it.brand_color || 'var(--accent)')};flex:none;"></span>
+                    <div>
+                      <div style="font-weight:500;">${esc(it.title)}</div>
+                      <div style="color:var(--muted);font-size:0.78rem;font-family:var(--mono);">/${esc(it.slug)}</div>
+                    </div>
+                  </div>
+                </td>
+                <td class="num">${esc(it.duration_min)} min</td>
+                <td>
+                  <span class="url-cell">
+                    <span class="u">${esc(url)}</span>
+                    <button class="copy-btn" data-copy="${escAttr(url)}" title="URL kopieren">
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                    </button>
+                  </span>
+                </td>
+                <td>${it.active ? `<span class="chip ok">Aktiv</span>` : `<span class="chip muted">Inaktiv</span>`}</td>
+                <td class="row-actions">
+                  <button class="btn sm ghost" data-act="edit" data-id="${escAttr(it.id)}">Bearbeiten</button>
+                  <button class="btn sm danger" data-act="del" data-id="${escAttr(it.id)}">Löschen</button>
+                </td>
+              </tr>`;
+            }).join('')}</tbody>
+          </table>
+        </div>
+      </div>
+    `;
+
+    body.querySelectorAll('.copy-btn').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        try {
+          await navigator.clipboard.writeText(btn.dataset.copy);
+          btn.classList.add('ok');
+          const orig = btn.innerHTML;
+          btn.innerHTML = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 4 4 10-10"/></svg>`;
+          setTimeout(() => { btn.classList.remove('ok'); btn.innerHTML = orig; }, 1400);
+          toast('URL kopiert', 'ok');
+        } catch (_) { toast('Konnte nicht kopieren', 'err'); }
+      });
+    });
+
+    body.querySelectorAll('[data-act="edit"]').forEach(b => {
+      b.addEventListener('click', () => {
+        const it = items.find(x => x.id === b.dataset.id);
+        if (it) openEventTypeEditor(it);
+      });
+    });
+    body.querySelectorAll('[data-act="del"]').forEach(b => {
+      b.addEventListener('click', async () => {
+        const it = items.find(x => x.id === b.dataset.id);
+        if (!it) return;
+        if (!await confirmDialog({
+          title: 'Event-Type löschen?',
+          message: `„${it.title}" wird unwiderruflich entfernt. Bestehende Buchungen bleiben erhalten.`,
+          confirmLabel: 'Löschen',
+          danger: true,
+        })) return;
+        try {
+          await api(`/api/host/event-types/${encodeURIComponent(it.id)}`, { method: 'DELETE' });
+          toast('Event-Type gelöscht', 'ok');
+          navigate();
+        } catch (e) { toast(e.message, 'err'); }
+      });
+    });
+  }
+
+  function openEventTypeEditor(existing) {
+    const isEdit = !!existing;
+    const e = existing || {
+      title: '', slug: '', duration_min: 30,
+      location_type: 'in_person',
+      min_notice_min: 240, max_horizon_days: 60,
+      brand_color: '#2b5adc', active: true,
+    };
+    const locOptions = [
+      ['in_person', 'Vor Ort'],
+      ['online_teams', 'Microsoft Teams'],
+      ['online_google_meet', 'Google Meet'],
+      ['phone', 'Telefon'],
+    ];
+    const m = openModal({
+      title: isEdit ? 'Event-Type bearbeiten' : 'Neuer Event-Type',
+      body: `
+        <div class="field">
+          <label>Titel</label>
+          <input id="f_title" value="${escAttr(e.title)}" placeholder="z. B. 30 Min Beratung">
+        </div>
+        <div class="field">
+          <label>Slug <span style="color:var(--muted-soft);">(URL-Pfad)</span></label>
+          <input id="f_slug" value="${escAttr(e.slug)}" placeholder="z-b-30-min-beratung">
+        </div>
+        <div class="field-row">
+          <div class="field">
+            <label>Dauer (Min)</label>
+            <input id="f_dur" type="number" min="5" step="5" value="${escAttr(e.duration_min)}">
+          </div>
+          <div class="field">
+            <label>Min. Vorlauf (Std)</label>
+            <input id="f_notice" type="number" min="0" value="${escAttr(Math.round((e.min_notice_min || 0) / 60))}">
+          </div>
+          <div class="field">
+            <label>Max. Vorausbuchung (Tage)</label>
+            <input id="f_horizon" type="number" min="1" value="${escAttr(e.max_horizon_days)}">
+          </div>
+        </div>
+        <div class="field-row">
+          <div class="field">
+            <label>Ort / Format</label>
+            <select id="f_loc">${locOptions.map(([v, l]) =>
+              `<option value="${escAttr(v)}" ${v === e.location_type ? 'selected' : ''}>${esc(l)}</option>`).join('')}</select>
+          </div>
+          <div class="field">
+            <label>Akzentfarbe</label>
+            <div style="display:flex;align-items:center;gap:8px;">
+              <input id="f_color" type="color" value="${escAttr(e.brand_color || '#2b5adc')}" style="width:48px;height:38px;padding:2px;border-radius:7px;">
+              <input id="f_color_hex" value="${escAttr(e.brand_color || '#2b5adc')}" style="flex:1;font-family:var(--mono);">
+            </div>
+          </div>
+        </div>
+        <div class="field" style="display:flex;align-items:center;justify-content:space-between;background:var(--surface-2);padding:10px 14px;border-radius:8px;border:1px solid var(--border);">
+          <div>
+            <div style="font-weight:500;">Aktiv</div>
+            <div style="color:var(--muted);font-size:0.82rem;">Öffentlich buchbar via /book-URL.</div>
+          </div>
+          <label class="switch"><input type="checkbox" id="f_active" ${e.active ? 'checked' : ''}><span></span></label>
+        </div>
+        <div id="f_err" class="banner" hidden></div>
+      `,
+      footer: `<button class="btn ghost" data-act="cancel">Abbrechen</button>
+               <button class="btn primary" data-act="save">${isEdit ? 'Speichern' : 'Anlegen'}</button>`,
+    });
+
+    m.root.querySelector('#f_color').addEventListener('input', (ev) => {
+      m.root.querySelector('#f_color_hex').value = ev.target.value;
+    });
+    m.root.querySelector('#f_color_hex').addEventListener('input', (ev) => {
+      const v = ev.target.value.trim();
+      if (/^#[0-9a-fA-F]{6}$/.test(v)) m.root.querySelector('#f_color').value = v;
+    });
+    m.root.querySelector('#f_title').addEventListener('blur', () => {
+      const slug = m.root.querySelector('#f_slug');
+      if (!slug.value.trim()) {
+        const t = m.root.querySelector('#f_title').value
+          .toLowerCase().replace(/[äöüß]/g, c => ({'ä':'ae','ö':'oe','ü':'ue','ß':'ss'})[c])
+          .replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+        slug.value = t;
+      }
+    });
+
+    m.root.querySelector('[data-act="cancel"]').addEventListener('click', () => m.close());
+    m.root.querySelector('[data-act="save"]').addEventListener('click', async () => {
+      const err = m.root.querySelector('#f_err');
+      err.hidden = true;
+      const payload = {
+        title: m.root.querySelector('#f_title').value.trim(),
+        slug: m.root.querySelector('#f_slug').value.trim(),
+        duration_min: parseInt(m.root.querySelector('#f_dur').value, 10),
+        location_type: m.root.querySelector('#f_loc').value,
+        min_notice_min: parseInt(m.root.querySelector('#f_notice').value || '0', 10) * 60,
+        max_horizon_days: parseInt(m.root.querySelector('#f_horizon').value, 10),
+        brand_color: m.root.querySelector('#f_color_hex').value.trim(),
+        active: m.root.querySelector('#f_active').checked,
+      };
+      if (!payload.title || !payload.slug) {
+        err.textContent = 'Titel und Slug sind erforderlich.';
+        err.hidden = false;
+        return;
+      }
+      const btn = m.root.querySelector('[data-act="save"]');
+      btn.disabled = true;
+      try {
+        if (isEdit) {
+          await api(`/api/host/event-types/${encodeURIComponent(e.id)}`, { method: 'PATCH', body: payload });
+        } else {
+          await api('/api/host/event-types', { method: 'POST', body: payload });
+        }
+        m.close();
+        toast(isEdit ? 'Gespeichert' : 'Event-Type angelegt', 'ok');
+        navigate();
+      } catch (ex) {
+        err.textContent = ex.message || 'Speichern fehlgeschlagen.';
+        err.hidden = false;
+        btn.disabled = false;
+      }
+    });
+  }
+
+  /* ============================================================
+     AVAILABILITY
+     ============================================================ */
+  const DAYS = ['Montag', 'Dienstag', 'Mittwoch', 'Donnerstag', 'Freitag', 'Samstag', 'Sonntag'];
+
+  async function renderAvailability(body, actions) {
+    body.innerHTML = `<div class="card"><div class="card-body" style="color:var(--muted);">Wird geladen…</div></div>`;
+
+    const [slots, overrides] = await Promise.all([
+      api('/api/host/availability'),
+      api('/api/host/date-overrides').catch(() => []),
+    ]);
+
+    // Build a working state grouped by weekday.
+    const grouped = Array.from({ length: 7 }, () => []);
+    (slots || []).forEach(s => {
+      if (s.weekday >= 0 && s.weekday <= 6) {
+        grouped[s.weekday].push({ start: s.start || '09:00', end: s.end || '17:00' });
+      }
+    });
+
+    actions.innerHTML = `
+      <button class="btn ghost" id="addOverride">+ Datums-Ausnahme</button>
+      <button class="btn primary" id="saveWeek">Wochenplan speichern</button>
+    `;
+
+    body.innerHTML = `
+      <div class="card" style="margin-bottom:18px;">
+        <div class="card-head">
+          <h2>Standard-Wochenrhythmus</h2>
+          <span class="meta">Alle Zeiten in ${esc(tz)}</span>
+        </div>
+        <div class="card-body flush week" id="week"></div>
+      </div>
+      <div class="card">
+        <div class="card-head">
+          <h2>Datums-Ausnahmen</h2>
+          <span class="meta">${(overrides || []).length} Einträge</span>
+        </div>
+        <div class="card-body flush" id="overrides"></div>
+      </div>
+    `;
+
+    function renderWeek() {
+      const wrap = $('#week');
+      wrap.innerHTML = DAYS.map((name, di) => {
+        const daySlots = grouped[di];
+        const isClosed = !daySlots.length;
+        const rows = isClosed
+          ? `<span class="closed-tag">geschlossen</span>`
+          : daySlots.map((s, si) => `
+              <div class="slot-row">
+                <input type="time" value="${escAttr(s.start)}" data-t="${di}:${si}:start">
+                <span class="dash">–</span>
+                <input type="time" value="${escAttr(s.end)}" data-t="${di}:${si}:end">
+                <button class="x" data-remove="${di}:${si}" title="Entfernen">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
+                </button>
+              </div>
+            `).join('');
+        return `
+          <div class="week-day" data-day="${di}">
+            <div class="name">${esc(name)}</div>
+            <div class="slots-col">${rows}</div>
+            <div class="add"><button class="btn sm ghost" data-add="${di}">+ Slot</button></div>
+          </div>`;
+      }).join('');
+
+      wrap.querySelectorAll('[data-add]').forEach(b => {
+        b.addEventListener('click', () => {
+          grouped[+b.dataset.add].push({ start: '09:00', end: '17:00' });
+          renderWeek();
+        });
+      });
+      wrap.querySelectorAll('[data-remove]').forEach(b => {
+        b.addEventListener('click', () => {
+          const [d, s] = b.dataset.remove.split(':').map(Number);
+          grouped[d].splice(s, 1);
+          renderWeek();
+        });
+      });
+      wrap.querySelectorAll('input[type="time"]').forEach(inp => {
+        inp.addEventListener('change', () => {
+          const [d, s, which] = inp.dataset.t.split(':');
+          grouped[+d][+s][which] = inp.value;
+        });
+      });
+    }
+
+    renderWeek();
+
+    function renderOverrides() {
+      const ovr = $('#overrides');
+      if (!overrides.length) {
+        ovr.innerHTML = `<div class="empty"><strong>Keine Ausnahmen.</strong>Urlaub, Feiertage und Sondertermine erscheinen hier.</div>`;
+        return;
+      }
+      ovr.innerHTML = `<table class="table">
+        <thead><tr><th>Datum</th><th>Art</th><th>Zeit</th><th class="row-actions"></th></tr></thead>
+        <tbody>${overrides.map(o => `
+          <tr>
+            <td class="num">${esc(o.date)}</td>
+            <td>${o.type === 'closed'
+              ? `<span class="chip muted">Geschlossen</span>`
+              : `<span class="chip ok">Verfügbar</span>`}</td>
+            <td class="num">${o.type === 'open' && o.start ? esc(o.start) + ' – ' + esc(o.end || '') : '—'}</td>
+            <td class="row-actions">
+              <button class="btn sm danger" data-del-ovr="${escAttr(o.id)}">Entfernen</button>
+            </td>
+          </tr>
+        `).join('')}</tbody></table>`;
+      ovr.querySelectorAll('[data-del-ovr]').forEach(b => {
+        b.addEventListener('click', async () => {
+          if (!await confirmDialog({ title: 'Ausnahme entfernen?', message: 'Diese Datums-Ausnahme wird gelöscht.', confirmLabel: 'Entfernen', danger: true })) return;
+          try {
+            await api(`/api/host/date-overrides/${encodeURIComponent(b.dataset.delOvr)}`, { method: 'DELETE' });
+            toast('Ausnahme entfernt', 'ok');
+            navigate();
+          } catch (e) { toast(e.message, 'err'); }
+        });
+      });
+    }
+    renderOverrides();
+
+    $('#saveWeek').addEventListener('click', async () => {
+      const payload = [];
+      grouped.forEach((daySlots, idx) => {
+        daySlots.forEach(s => {
+          if (s.start && s.end) payload.push({ weekday: idx, start: s.start, end: s.end });
+        });
+      });
+      const btn = $('#saveWeek');
+      btn.disabled = true;
+      try {
+        await api('/api/host/availability', { method: 'PUT', body: payload });
+        toast('Wochenplan gespeichert', 'ok');
+      } catch (e) { toast(e.message, 'err'); }
+      finally { btn.disabled = false; }
+    });
+
+    $('#addOverride').addEventListener('click', () => openOverrideEditor());
+  }
+
+  function openOverrideEditor() {
+    const today = new Date().toISOString().slice(0, 10);
+    const m = openModal({
+      title: 'Datums-Ausnahme',
+      body: `
+        <div class="field">
+          <label>Datum</label>
+          <input id="o_date" type="date" value="${escAttr(today)}">
+        </div>
+        <div class="field">
+          <label>Art</label>
+          <select id="o_type">
+            <option value="closed">Geschlossen (Urlaub / Feiertag)</option>
+            <option value="open">Zusätzliche Zeiten (Sondertermin)</option>
+          </select>
+        </div>
+        <div id="o_times" hidden>
+          <div class="field-row">
+            <div class="field"><label>Von</label><input id="o_start" type="time" value="09:00"></div>
+            <div class="field"><label>Bis</label><input id="o_end" type="time" value="17:00"></div>
+          </div>
+        </div>
+        <div id="o_err" class="banner" hidden></div>
+      `,
+      footer: `<button class="btn ghost" data-act="cancel">Abbrechen</button>
+               <button class="btn primary" data-act="save">Hinzufügen</button>`,
+    });
+    m.root.querySelector('#o_type').addEventListener('change', (ev) => {
+      m.root.querySelector('#o_times').hidden = ev.target.value !== 'open';
+    });
+    m.root.querySelector('[data-act="cancel"]').addEventListener('click', () => m.close());
+    m.root.querySelector('[data-act="save"]').addEventListener('click', async () => {
+      const err = m.root.querySelector('#o_err');
+      err.hidden = true;
+      const type = m.root.querySelector('#o_type').value;
+      const payload = {
+        date: m.root.querySelector('#o_date').value,
+        type,
+      };
+      if (type === 'open') {
+        payload.start = m.root.querySelector('#o_start').value;
+        payload.end = m.root.querySelector('#o_end').value;
+      }
+      if (!payload.date) {
+        err.textContent = 'Datum ist erforderlich.';
+        err.hidden = false;
+        return;
+      }
+      try {
+        await api('/api/host/date-overrides', { method: 'POST', body: payload });
+        m.close();
+        toast('Ausnahme angelegt', 'ok');
+        navigate();
+      } catch (ex) {
+        err.textContent = ex.message;
+        err.hidden = false;
+      }
+    });
+  }
+
+  /* ============================================================
+     INTEGRATIONS
+     ============================================================ */
+  const PROVIDERS = [
+    {
+      key: 'msgraph', name: 'Microsoft 365',
+      blurb: 'Outlook-Kalender + Teams-Meetings über Microsoft Graph.',
+      logoText: 'M', logoColor: '#0078d4',
+    },
+    {
+      key: 'google', name: 'Google Calendar',
+      blurb: 'Kalender-Sync + automatische Google-Meet-Links.',
+      logoText: 'G', logoColor: '#1a73e8',
+    },
+    {
+      key: 'jitsi', name: 'Jitsi Meet',
+      blurb: 'Selbst gehostete Videokonferenz-Links pro Termin.',
+      logoText: 'J', logoColor: '#1c6f3b',
+    },
+  ];
+
+  async function renderIntegrations(body, actions) {
+    body.innerHTML = `<div style="color:var(--muted);">Wird geladen…</div>`;
+    const list = await api('/api/host/integrations').catch(() => []);
+    const byKey = Object.fromEntries((list || []).map(x => [x.provider, x]));
+    body.innerHTML = `<div class="integrations">${PROVIDERS.map(p => {
+      const i = byKey[p.key];
+      const connected = !!i;
+      return `<div class="integration" data-prov="${escAttr(p.key)}">
+        <div class="head">
+          <div class="logo" style="background:${escAttr(p.logoColor)}22;color:${escAttr(p.logoColor)};">
+            <span style="font-weight:700;font-size:1.05rem;">${esc(p.logoText)}</span>
+          </div>
+          <div>
+            <h3>${esc(p.name)}</h3>
+            <div class="sub">${connected
+              ? `<span class="chip ok">Verbunden</span>`
+              : `<span class="chip muted">Nicht verbunden</span>`}</div>
+          </div>
+        </div>
+        <div class="body">${esc(p.blurb)}</div>
+        <div class="meta">
+          <span>${connected && i.last_sync_at ? 'Letzter Sync: ' + esc(fmtRel(i.last_sync_at)) : 'Noch kein Sync'}</span>
+          <div class="actions">
+            ${connected
+              ? `<button class="btn sm ghost" data-test="${escAttr(i.id)}">Test</button>
+                 <button class="btn sm danger" data-disc="${escAttr(i.id)}">Trennen</button>`
+              : `<button class="btn sm primary" data-conn="${escAttr(p.key)}">Verbinden</button>`}
+          </div>
+        </div>
+        ${connected && i.last_error
+          ? `<div class="banner" style="margin:0;">${esc(i.last_error)}</div>`
+          : ''}
+      </div>`;
+    }).join('')}</div>`;
+
+    body.querySelectorAll('[data-conn]').forEach(b => {
+      b.addEventListener('click', () => openConnect(b.dataset.conn));
+    });
+    body.querySelectorAll('[data-disc]').forEach(b => {
+      b.addEventListener('click', async () => {
+        if (!await confirmDialog({
+          title: 'Integration trennen?',
+          message: 'Die Verbindung wird entfernt. Bestehende Buchungen bleiben unverändert.',
+          confirmLabel: 'Trennen',
+          danger: true,
+        })) return;
+        try {
+          await api(`/api/host/integrations/${encodeURIComponent(b.dataset.disc)}`, { method: 'DELETE' });
+          toast('Integration getrennt', 'ok');
+          navigate();
+        } catch (e) { toast(e.message, 'err'); }
+      });
+    });
+    body.querySelectorAll('[data-test]').forEach(b => {
+      b.addEventListener('click', async () => {
+        b.disabled = true; const orig = b.textContent; b.textContent = 'Teste…';
+        try {
+          await api(`/api/host/integrations/${encodeURIComponent(b.dataset.test)}/test`, { method: 'POST' });
+          toast('Verbindung OK', 'ok');
+        } catch (e) { toast(e.message || 'Test fehlgeschlagen', 'err'); }
+        finally { b.disabled = false; b.textContent = orig; }
+      });
+    });
+  }
+
+  function openConnect(provider) {
+    if (provider === 'msgraph') {
+      const m = openModal({
+        title: 'Microsoft 365 verbinden',
+        body: `
+          <p style="color:var(--muted);margin-top:0;">App-Registrierung im Azure-Portal mit Application-Permission <code style="font-family:var(--mono);background:var(--surface-2);padding:1px 6px;border-radius:4px;">Calendars.ReadWrite</code> + Admin-Consent.</p>
+          <div class="field"><label>Tenant ID</label><input id="g_tenant" placeholder="00000000-0000-0000-0000-000000000000"></div>
+          <div class="field"><label>Client ID</label><input id="g_client" placeholder="00000000-…"></div>
+          <div class="field"><label>Client Secret</label><input id="g_secret" type="password"></div>
+          <div class="field"><label>User-ID (UPN oder Objekt-ID)</label><input id="g_user" placeholder="bookings@example.com"></div>
+          <div id="g_err" class="banner" hidden></div>
+        `,
+        footer: `<button class="btn ghost" data-act="cancel">Abbrechen</button>
+                 <button class="btn primary" data-act="save">Verbinden</button>`,
+      });
+      m.root.querySelector('[data-act="cancel"]').addEventListener('click', () => m.close());
+      m.root.querySelector('[data-act="save"]').addEventListener('click', async () => {
+        const err = m.root.querySelector('#g_err');
+        err.hidden = true;
+        const payload = {
+          tenant_id: m.root.querySelector('#g_tenant').value.trim(),
+          client_id: m.root.querySelector('#g_client').value.trim(),
+          client_secret: m.root.querySelector('#g_secret').value,
+          user_id: m.root.querySelector('#g_user').value.trim(),
+        };
+        if (!payload.tenant_id || !payload.client_id || !payload.client_secret || !payload.user_id) {
+          err.textContent = 'Alle Felder sind erforderlich.';
+          err.hidden = false;
+          return;
+        }
+        const btn = m.root.querySelector('[data-act="save"]');
+        btn.disabled = true;
+        try {
+          await api('/api/host/integrations/msgraph', { method: 'POST', body: payload });
+          m.close();
+          toast('Microsoft 365 verbunden', 'ok');
+          navigate();
+        } catch (ex) {
+          err.textContent = ex.message;
+          err.hidden = false;
+          btn.disabled = false;
+        }
+      });
+      return;
+    }
+    if (provider === 'google') {
+      const next = encodeURIComponent(location.pathname + location.hash);
+      window.location.href = `/api/host/integrations/google/connect?redirect=${next}`;
+      return;
+    }
+    if (provider === 'jitsi') {
+      const m = openModal({
+        title: 'Jitsi Meet verbinden',
+        body: `
+          <p style="color:var(--muted);margin-top:0;">Optional: eigener Jitsi-Server. Standard ist <code style="font-family:var(--mono);background:var(--surface-2);padding:1px 6px;border-radius:4px;">meet.jit.si</code>.</p>
+          <div class="field"><label>Basis-URL</label><input id="j_url" value="https://meet.jit.si"></div>
+          <div class="field"><label>JWT-Secret (optional)</label><input id="j_secret" type="password" placeholder="Nur bei privater Instanz mit JWT-Auth"></div>
+          <div id="j_err" class="banner" hidden></div>
+        `,
+        footer: `<button class="btn ghost" data-act="cancel">Abbrechen</button>
+                 <button class="btn primary" data-act="save">Verbinden</button>`,
+      });
+      m.root.querySelector('[data-act="cancel"]').addEventListener('click', () => m.close());
+      m.root.querySelector('[data-act="save"]').addEventListener('click', async () => {
+        const err = m.root.querySelector('#j_err');
+        err.hidden = true;
+        const payload = {
+          base_url: m.root.querySelector('#j_url').value.trim(),
+          jwt_secret: m.root.querySelector('#j_secret').value,
+        };
+        if (!payload.base_url) {
+          err.textContent = 'Basis-URL ist erforderlich.';
+          err.hidden = false;
+          return;
+        }
+        const btn = m.root.querySelector('[data-act="save"]');
+        btn.disabled = true;
+        try {
+          await api('/api/host/integrations/jitsi', { method: 'POST', body: payload });
+          m.close();
+          toast('Jitsi verbunden', 'ok');
+          navigate();
+        } catch (ex) {
+          err.textContent = ex.message;
+          err.hidden = false;
+          btn.disabled = false;
+        }
+      });
+    }
+  }
+
+  /* ============================================================
+     Boot
+     ============================================================ */
+  if (!location.hash) location.hash = '#/overview';
+  loadMe();
+  navigate();
+})();
+</script>
+</body>
+</html>

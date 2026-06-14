@@ -1,0 +1,425 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<title>{{ORG_NAME}}</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  /* ------------------------------------------------------------------
+     Landing — same editorial language as book.html / host-dashboard:
+     warm-grey neutrals, dashed hairlines, monospace numerics,
+     single accent (#2b5adc), generous whitespace.
+     Each event-type carries its own brand_color as a left-edge stripe.
+     ------------------------------------------------------------------ */
+  :root {
+    --bg: #fafaf8;
+    --surface: #ffffff;
+    --surface-2: #f4f4ef;
+    --surface-3: #ebebe5;
+    --fg: #16161a;
+    --fg-soft: #2c2c33;
+    --muted: #6a6a72;
+    --muted-soft: #9a9aa2;
+    --border: #e8e8e3;
+    --border-strong: #d6d6d0;
+    --accent: #2b5adc;
+    --accent-deep: #1f44b0;
+    --accent-soft: #eef2fd;
+    --accent-tint: #f6f8fe;
+    --on-accent: #ffffff;
+    --radius: 8px;
+    --radius-lg: 12px;
+    --mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
+    --sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    --ease: cubic-bezier(.4,1.6,.6,1);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0c0c0f;
+      --surface: #131318;
+      --surface-2: #1a1a20;
+      --surface-3: #22222a;
+      --fg: #f3f3f0;
+      --fg-soft: #d8d8d4;
+      --muted: #8b8b94;
+      --muted-soft: #5a5a63;
+      --border: #22222a;
+      --border-strong: #32323c;
+      --accent: #7493ef;
+      --accent-deep: #94aff6;
+      --accent-soft: #1a2342;
+      --accent-tint: #131a30;
+      --on-accent: #0c0c0f;
+    }
+  }
+  *, *::before, *::after { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  html { color-scheme: light dark; }
+  body {
+    font: 14.5px/1.55 var(--sans);
+    color: var(--fg);
+    background: var(--bg);
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+    font-feature-settings: "ss01", "cv11";
+    min-height: 100vh;
+  }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; text-underline-offset: 3px; text-decoration-thickness: 1px; }
+  ::selection { background: var(--accent-soft); color: var(--accent-deep); }
+  .num { font-family: var(--mono); font-variant-numeric: tabular-nums; letter-spacing: -0.02em; }
+
+  /* -------- Shell -------- */
+  .page {
+    max-width: 720px;
+    margin: 0 auto;
+    padding: 64px 28px 48px;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+  }
+  @media (max-width: 640px) {
+    .page { padding: 36px 18px 32px; }
+  }
+
+  /* -------- Header block -------- */
+  .head { margin-bottom: 36px; }
+  .accent-mark {
+    width: 28px; height: 3px;
+    background: var(--accent);
+    border-radius: 2px;
+    margin-bottom: 16px;
+  }
+  .head h1 {
+    margin: 0;
+    font-size: 2rem;
+    font-weight: 600;
+    letter-spacing: -0.03em;
+    line-height: 1.1;
+    color: var(--fg);
+  }
+  @media (max-width: 640px) {
+    .head h1 { font-size: 1.55rem; }
+  }
+  .head .lede {
+    margin: 10px 0 0;
+    color: var(--muted);
+    font-size: 0.95rem;
+  }
+
+  /* -------- Section label -------- */
+  .section-label {
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.16em;
+    color: var(--muted-soft);
+    margin: 0 0 14px;
+    padding-bottom: 14px;
+    border-bottom: 1px dashed var(--border-strong);
+    display: flex; align-items: baseline; justify-content: space-between;
+    gap: 12px;
+  }
+  .section-label .count {
+    font-family: var(--mono);
+    letter-spacing: 0.04em;
+    color: var(--muted);
+  }
+
+  /* -------- Event-type list -------- */
+  .grid {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  a.et-card {
+    position: relative;
+    display: grid;
+    grid-template-columns: 4px 1fr auto;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    overflow: hidden;
+    color: inherit;
+    text-decoration: none;
+    transition: border-color .18s var(--ease), transform .18s var(--ease);
+  }
+  a.et-card:hover {
+    border-color: var(--border-strong);
+    transform: translateY(-1px);
+    text-decoration: none;
+  }
+  a.et-card:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+  .et-stripe {
+    background: var(--accent);
+  }
+  .et-body {
+    padding: 18px 20px;
+    min-width: 0;
+  }
+  .et-body .title {
+    font-size: 1.05rem;
+    font-weight: 600;
+    letter-spacing: -0.012em;
+    color: var(--fg);
+    margin: 0;
+  }
+  .et-body .meta {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px 10px;
+    margin-top: 6px;
+    font-size: 0.86rem;
+    color: var(--muted);
+  }
+  .et-body .meta svg {
+    width: 14px; height: 14px;
+    color: var(--muted-soft);
+    flex: none;
+    margin-right: 4px;
+  }
+  .et-body .meta .dot { color: var(--muted-soft); }
+  .et-body .meta .duration { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+  .et-body .meta .host strong { color: var(--fg-soft); font-weight: 500; }
+  .et-body .meta .price {
+    font-family: var(--mono);
+    color: var(--fg-soft);
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    padding: 1px 7px;
+    border-radius: 999px;
+    font-size: 0.78rem;
+  }
+  .et-arrow {
+    align-self: center;
+    padding: 0 20px 0 8px;
+    color: var(--muted-soft);
+    display: grid; place-items: center;
+    transition: color .18s var(--ease), transform .18s var(--ease);
+  }
+  .et-arrow svg { width: 16px; height: 16px; }
+  a.et-card:hover .et-arrow { color: var(--accent); transform: translateX(2px); }
+
+  /* -------- Empty state -------- */
+  .empty {
+    border: 1px dashed var(--border-strong);
+    border-radius: var(--radius-lg);
+    background: var(--surface-2);
+    padding: 40px 24px;
+    text-align: center;
+    color: var(--muted);
+  }
+  .empty svg {
+    width: 26px; height: 26px;
+    color: var(--muted-soft);
+    margin-bottom: 12px;
+  }
+  .empty p { margin: 0; font-size: 0.94rem; }
+  .empty p + p { margin-top: 4px; color: var(--muted-soft); font-size: 0.85rem; }
+
+  /* -------- Error state -------- */
+  .err {
+    border: 1px solid color-mix(in oklab, #b91c1c 30%, var(--border));
+    background: color-mix(in oklab, #b91c1c 8%, var(--surface));
+    border-radius: var(--radius-lg);
+    padding: 16px 18px;
+    color: var(--fg-soft);
+    font-size: 0.9rem;
+    display: flex; gap: 10px; align-items: flex-start;
+  }
+  .err svg { width: 16px; height: 16px; color: #b91c1c; flex: none; margin-top: 2px; }
+
+  /* -------- Loading skeletons -------- */
+  .skel-card {
+    display: grid;
+    grid-template-columns: 4px 1fr;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    overflow: hidden;
+  }
+  .skel-card .stripe { background: var(--border); }
+  .skel-card .body { padding: 18px 20px; }
+  .shimmer {
+    background: linear-gradient(90deg, var(--surface-2) 0%, var(--surface-3) 50%, var(--surface-2) 100%);
+    background-size: 200% 100%;
+    animation: shimmer 1.4s linear infinite;
+    border-radius: 4px;
+    color: transparent;
+    display: inline-block;
+  }
+  .shimmer.t { height: 14px; width: 60%; }
+  .shimmer.m { height: 10px; width: 40%; margin-top: 10px; }
+  @keyframes shimmer { from { background-position: 200% 0; } to { background-position: -200% 0; } }
+
+  /* -------- Footer -------- */
+  footer {
+    margin-top: auto;
+    padding-top: 48px;
+  }
+  .foot-inner {
+    border-top: 1px dashed var(--border);
+    padding-top: 18px;
+    display: flex; justify-content: flex-end;
+  }
+  footer a {
+    font-size: 0.72rem;
+    color: var(--muted-soft);
+    text-transform: uppercase;
+    letter-spacing: 0.18em;
+    text-decoration: none;
+  }
+  footer a:hover { color: var(--muted); text-decoration: none; }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+  }
+</style>
+</head>
+<body>
+
+<div class="page">
+  <header class="head">
+    <div class="accent-mark" aria-hidden="true"></div>
+    <h1>{{ORG_NAME}}</h1>
+    <p class="lede">Wähle einen Termin-Typ, um eine passende Zeit zu finden.</p>
+  </header>
+
+  <main>
+    <div class="section-label">
+      <span>Aktuelle Termin-Typen</span>
+      <span class="count" id="count" aria-hidden="true"></span>
+    </div>
+    <div id="grid" class="grid" aria-live="polite" aria-busy="true">
+      <div class="skel-card" aria-hidden="true">
+        <div class="stripe"></div>
+        <div class="body"><span class="shimmer t"></span><br><span class="shimmer m"></span></div>
+      </div>
+      <div class="skel-card" aria-hidden="true">
+        <div class="stripe"></div>
+        <div class="body"><span class="shimmer t"></span><br><span class="shimmer m"></span></div>
+      </div>
+    </div>
+  </main>
+
+  <footer>
+    <div class="foot-inner">
+      <a href="/_/">Admin</a>
+    </div>
+  </footer>
+</div>
+
+<script>
+(() => {
+  const ICON = {
+    clock: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>',
+    arrowR: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg>',
+    calend: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 9h18M8 3v4M16 3v4"/></svg>',
+    alert: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M12 8v5M12 16h.01"/></svg>',
+  };
+
+  const grid = document.getElementById('grid');
+  const countEl = document.getElementById('count');
+
+  const esc = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, c =>
+    ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'})[c]);
+  const escAttr = (s) => String(s == null ? '' : s).replace(/"/g, '&quot;');
+
+  function fmtDuration(min) {
+    const m = Number(min);
+    if (!Number.isFinite(m) || m <= 0) return '–';
+    if (m < 60) return `${m} Min`;
+    const h = Math.floor(m / 60);
+    const r = m % 60;
+    return r ? `${h} Std ${r} Min` : `${h} Std`;
+  }
+
+  function fmtPrice(amount, currency) {
+    const cur = (currency || 'EUR').toUpperCase();
+    const n = Number(amount) / 100;
+    if (!Number.isFinite(n)) return '';
+    try {
+      return new Intl.NumberFormat('de-DE', { style: 'currency', currency: cur }).format(n);
+    } catch (_) {
+      return `${n.toFixed(2)} ${cur}`;
+    }
+  }
+
+  function safeBrand(hex) {
+    return /^#[0-9a-f]{6}$/i.test(hex || '') ? hex : null;
+  }
+
+  function renderItems(items) {
+    grid.setAttribute('aria-busy', 'false');
+    if (!items.length) {
+      countEl.textContent = '';
+      grid.innerHTML = `
+        <div class="empty">
+          ${ICON.calend}
+          <p>Aktuell sind keine Termine buchbar.</p>
+          <p>Schau später noch einmal vorbei.</p>
+        </div>`;
+      return;
+    }
+    countEl.textContent = String(items.length).padStart(2, '0');
+
+    grid.innerHTML = items.map(it => {
+      const brand = safeBrand(it.brand_color);
+      const stripeStyle = brand ? `style="background:${brand};"` : '';
+      const paid = it.payment_mode && it.payment_mode !== 'none';
+      const priceHtml = paid
+        ? `<span class="dot">·</span><span class="price">${esc(fmtPrice(it.payment_amount, it.payment_currency))}</span>`
+        : '';
+      const hostHtml = it.host_name
+        ? `<span class="dot">·</span><span class="host">mit <strong>${esc(it.host_name)}</strong></span>`
+        : '';
+      return `
+        <a class="et-card"
+           href="/book/${encodeURIComponent(it.host_slug)}/${encodeURIComponent(it.slug)}"
+           aria-label="${escAttr(it.title)} — ${escAttr(fmtDuration(it.duration_min))} mit ${escAttr(it.host_name || '')}">
+          <span class="et-stripe" ${stripeStyle} aria-hidden="true"></span>
+          <div class="et-body">
+            <h2 class="title">${esc(it.title)}</h2>
+            <div class="meta">
+              ${ICON.clock}
+              <span class="duration">${esc(fmtDuration(it.duration_min))}</span>
+              ${hostHtml}
+              ${priceHtml}
+            </div>
+          </div>
+          <span class="et-arrow" aria-hidden="true">${ICON.arrowR}</span>
+        </a>
+      `;
+    }).join('');
+  }
+
+  function renderError() {
+    grid.setAttribute('aria-busy', 'false');
+    countEl.textContent = '';
+    grid.innerHTML = `
+      <div class="err">
+        ${ICON.alert}
+        <div>
+          <div style="font-weight:500;color:var(--fg);">Die Termin-Typen konnten nicht geladen werden.</div>
+          <div style="margin-top:4px;color:var(--muted);">Bitte aktualisiere die Seite oder versuche es später noch einmal.</div>
+        </div>
+      </div>`;
+  }
+
+  (async () => {
+    try {
+      const r = await fetch('/api/public/v1/event-types', { headers: { 'Accept': 'application/json' } });
+      if (!r.ok) throw new Error('http ' + r.status);
+      const data = await r.json();
+      renderItems(Array.isArray(data.event_types) ? data.event_types : []);
+    } catch (_) {
+      renderError();
+    }
+  })();
+})();
+</script>
+</body>
+</html>
