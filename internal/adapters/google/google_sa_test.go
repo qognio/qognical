@@ -16,6 +16,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/qognio/qognical/internal/adapters"
 )
 
 func saCredsJSON(t *testing.T, key *rsa.PrivateKey) json.RawMessage {
@@ -105,6 +107,67 @@ func TestServiceAccountFreeBusy(t *testing.T) {
 	}
 	if claims["aud"] != "https://oauth2.googleapis.com/token" {
 		t.Errorf("aud = %v", claims["aud"])
+	}
+}
+
+func TestServiceAccountCreateEventOmitsAttendees(t *testing.T) {
+	key, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var body map[string]any
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if strings.HasSuffix(r.URL.Path, "/token") {
+			_, _ = w.Write([]byte(`{"access_token":"sa-tok","expires_in":3600}`))
+			return
+		}
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		_, _ = w.Write([]byte(`{"id":"evt-1"}`))
+	}))
+	defer srv.Close()
+	conf := json.RawMessage(fmt.Sprintf(`{"oauth_base":%q,"api_base":%q}`, srv.URL, srv.URL))
+	prov, err := Factory(saCredsJSON(t, key), conf)
+	if err != nil {
+		t.Fatalf("factory: %v", err)
+	}
+	if _, err := prov.CreateEvent(context.Background(), adapters.CalendarEvent{
+		Summary: "x", StartUTC: time.Now().UTC(), EndUTC: time.Now().Add(time.Hour).UTC(),
+		AttendeeMail: "guest@example.com", AttendeeName: "Guest",
+	}); err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	if _, ok := body["attendees"]; ok {
+		t.Errorf("service-account event must NOT contain attendees (403 forbiddenForServiceAccounts), got: %v", body["attendees"])
+	}
+}
+
+func TestOAuthCreateEventKeepsAttendees(t *testing.T) {
+	var body map[string]any
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if strings.HasSuffix(r.URL.Path, "/token") {
+			_, _ = w.Write([]byte(`{"access_token":"u-tok","expires_in":3600}`))
+			return
+		}
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		_, _ = w.Write([]byte(`{"id":"evt-1"}`))
+	}))
+	defer srv.Close()
+	creds := json.RawMessage(`{"client_id":"c","client_secret":"s","refresh_token":"r","calendar_id":"primary"}`)
+	conf := json.RawMessage(fmt.Sprintf(`{"oauth_base":%q,"api_base":%q}`, srv.URL, srv.URL))
+	prov, err := Factory(creds, conf)
+	if err != nil {
+		t.Fatalf("factory: %v", err)
+	}
+	if _, err := prov.CreateEvent(context.Background(), adapters.CalendarEvent{
+		Summary: "x", StartUTC: time.Now().UTC(), EndUTC: time.Now().Add(time.Hour).UTC(),
+		AttendeeMail: "guest@example.com", AttendeeName: "Guest",
+	}); err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	if _, ok := body["attendees"]; !ok {
+		t.Error("OAuth user-flow event must keep attendees")
 	}
 }
 

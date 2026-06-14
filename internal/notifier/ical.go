@@ -57,7 +57,14 @@ func RenderICS(e ICalEvent) string {
 		fmt.Fprintf(&b, "ORGANIZER:mailto:%s\r\n", e.Organizer)
 	}
 	if e.Attendee != "" {
-		fmt.Fprintf(&b, "ATTENDEE;RSVP=FALSE:mailto:%s\r\n", e.Attendee)
+		// For METHOD:REQUEST the attendee must be an actionable participant so
+		// mail clients (Gmail/Outlook/Apple) render Yes/Maybe/No RSVP buttons.
+		// PUBLISH/CANCEL keep the passive form.
+		if e.Method == "REQUEST" {
+			fmt.Fprintf(&b, "ATTENDEE;ROLE=REQ-PARTICIPANT;PARTSTAT=NEEDS-ACTION;RSVP=TRUE:mailto:%s\r\n", e.Attendee)
+		} else {
+			fmt.Fprintf(&b, "ATTENDEE;RSVP=FALSE:mailto:%s\r\n", e.Attendee)
+		}
 	}
 	fmt.Fprintf(&b, "STATUS:%s\r\n", e.Status)
 	b.WriteString("END:VEVENT\r\n")

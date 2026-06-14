@@ -204,14 +204,26 @@ func (p *Provider) CreateEvent(ctx context.Context, in adapters.CalendarEvent) (
 		"location":    in.Location,
 		"start":       map[string]any{"dateTime": in.StartUTC.Format(time.RFC3339), "timeZone": "UTC"},
 		"end":         map[string]any{"dateTime": in.EndUTC.Format(time.RFC3339), "timeZone": "UTC"},
-		"attendees": []map[string]any{
+	}
+	// A service account cannot invite attendees without Domain-Wide Delegation
+	// (Google returns 403 forbiddenForServiceAccounts). In SA mode we create the
+	// event on the owner's shared calendar WITHOUT attendees; the invitee is
+	// notified via qognical's own confirmation mail (incl. meeting link), not a
+	// Google calendar invite. The OAuth user flow keeps inviting attendees.
+	if !p.creds.isServiceAccount() {
+		body["attendees"] = []map[string]any{
 			{"email": in.AttendeeMail, "displayName": in.AttendeeName, "responseStatus": "needsAction"},
-		},
+		}
 	}
 	// v0.3 Google Meet: when the caller asks for an online meeting, attach a
 	// conferenceData.createRequest block. Google returns the join URL in
 	// event.conferenceData.entryPoints[type=video].uri after creation.
-	if in.CreateOnlineMeeting {
+	//
+	// Meet creation only works in the OAuth user flow. A service account on a
+	// shared consumer calendar gets a 400 "Invalid conference type value"
+	// (Meet needs a real user / Workspace context), so we skip conferenceData
+	// in SA mode — the event is still created, just without an auto Meet link.
+	if in.CreateOnlineMeeting && !p.creds.isServiceAccount() {
 		body["conferenceData"] = map[string]any{
 			"createRequest": map[string]any{
 				"requestId": fmt.Sprintf("qog-%d", in.StartUTC.UnixNano()),

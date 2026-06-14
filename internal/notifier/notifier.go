@@ -69,12 +69,15 @@ func (n *Notifier) WithMailer(m mailer.Mailer) *Notifier {
 // iCal attachment of method PUBLISH/STATUS:CONFIRMED. Also pings the host
 // in a separate email so they know to expect the meeting.
 func (n *Notifier) SendConfirmation(b Booking) error {
-	ics := RenderICS(b.toICalEvent("PUBLISH", "CONFIRMED", 0))
+	// METHOD:REQUEST so the invitee gets an actionable calendar invitation
+	// (RSVP) rather than a passive "add to calendar" — works without Google
+	// attendees / Workspace DWD (which a service account can't do).
+	ics := RenderICS(b.toICalEvent("REQUEST", "CONFIRMED", 0))
 	body, err := render(tmplConfirmationInvitee, b)
 	if err != nil {
 		return err
 	}
-	if err := n.send(b.InviteeEmail, fmt.Sprintf("Buchung bestätigt: %s", b.EventTypeTitle), body, ics); err != nil {
+	if err := n.send(b.InviteeEmail, fmt.Sprintf("Einladung: %s", b.EventTypeTitle), body, ics); err != nil {
 		return err
 	}
 	// host copy (best effort; failure here doesn't block invitee)
