@@ -33,7 +33,8 @@ aller fehlenden Werte.
 | `QOGNICAL_LISTEN_ADDR` | `0.0.0.0:8090` | TCP-Listener (in Docker via `--http`) |
 | `QOGNICAL_LOG_LEVEL` | `info` | `debug` / `info` / `warn` / `error` |
 | `QOGNICAL_LOG_FORMAT` | `json` | `json` (für Aggregatoren) oder `text` |
-| `QOGNICAL_CORS_ALLOWED_ORIGINS` | _(leer)_ | Komma-Liste fremder Domains, die das Embed nutzen dürfen |
+| `QOGNICAL_EMBED_ORIGINS` | _(leer)_ | Komma-Liste voller Origins (z. B. `https://acme.com`), die die öffentliche Buchungsseite `/book/{host}/{slug}` per iframe **einbetten** dürfen. Setzt dort CSP `frame-ancestors` + entfernt `X-Frame-Options`. Leer = Einbetten verboten. |
+| `QOGNICAL_CORS_ALLOWED_ORIGINS` | _(leer)_ | Komma-Liste voller Origins für **CORS** (Cross-Origin-`fetch`/XHR auf die öffentliche API). Getrennt vom Embed oben. |
 | `QOGNICAL_RATE_LIMIT_PUBLIC` | `60/min` | Per-IP Rate-Limit für Lese-Endpoints (`N/sec`, `N/min`, `N/hour`) |
 | `QOGNICAL_RATE_LIMIT_BOOK` | `5/min` | Per-IP Rate-Limit für Mutationen (Buchung/Cancel/Reschedule) |
 | `QOGNICAL_CAPTCHA_PROVIDER` | _(leer)_ | `hcaptcha` / `turnstile` / leer (kein Captcha) |
