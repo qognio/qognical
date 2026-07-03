@@ -742,6 +742,36 @@
     ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'})[c]);
   const escAttr = (s) => String(s == null ? '' : s).replace(/"/g, '&quot;');
 
+  // Rich-text description: event_types.description is an EditorField (HTML).
+  // Render it via a strict allowlist so host-authored formatting shows as
+  // intended, without an XSS surface (scripts/handlers/other attrs stripped).
+  const DESC_KEEP = { P:1, BR:1, STRONG:1, B:1, EM:1, I:1, U:1, A:1, UL:1, OL:1, LI:1, H3:1, H4:1, BLOCKQUOTE:1, SPAN:1 };
+  const DESC_DROP = { SCRIPT:1, STYLE:1, IFRAME:1, OBJECT:1, EMBED:1, LINK:1, META:1, FORM:1 };
+  function sanitizeDesc(html) {
+    const doc = new DOMParser().parseFromString(String(html == null ? '' : html), 'text/html');
+    const walk = (node) => {
+      Array.from(node.childNodes).forEach((n) => {
+        if (n.nodeType === 8) { n.remove(); return; }            // comments
+        if (n.nodeType !== 1) return;                            // keep text
+        if (DESC_DROP[n.tagName]) { n.remove(); return; }        // drop dangerous subtrees
+        walk(n);                                                 // sanitize children first
+        if (!DESC_KEEP[n.tagName]) {                             // unwrap disallowed (children already clean)
+          while (n.firstChild) node.insertBefore(n.firstChild, n);
+          node.removeChild(n);
+          return;
+        }
+        Array.from(n.attributes).forEach((a) => {
+          const okHref = n.tagName === 'A' && a.name === 'href' && /^(https?:|mailto:)/i.test(a.value.trim());
+          if (!okHref) n.removeAttribute(a.name);
+        });
+        if (n.tagName === 'A') { n.setAttribute('target', '_blank'); n.setAttribute('rel', 'noopener nofollow'); }
+      });
+    };
+    walk(doc.body);
+    return doc.body.innerHTML;
+  }
+  const stripHtml = (html) => new DOMParser().parseFromString(String(html == null ? '' : html), 'text/html').body.textContent || '';
+
   const $ = (sel, r = document) => r.querySelector(sel);
   const $$ = (sel, r = document) => Array.from(r.querySelectorAll(sel));
 
@@ -952,7 +982,7 @@
           </div>
           <h1>${esc(et.title)}</h1>
           ${et.description ? `
-            <div class="description" id="etDesc">${esc(et.description)}</div>
+            <div class="description" id="etDesc">${sanitizeDesc(et.description)}</div>
             <button class="show-desc" id="showDesc" type="button">Beschreibung anzeigen</button>
           ` : ''}
           <div class="meta-list">
@@ -1384,17 +1414,17 @@
 
     const icsHref = makeIcsHref({
       title: et.title,
-      description: et.description || '',
+      description: stripHtml(et.description),
       start, end,
       organizer: et.host_name || '',
       location: loc.label,
     });
     const googleHref = makeGoogleCalHref({
-      title: et.title, description: et.description || '',
+      title: et.title, description: stripHtml(et.description),
       start, end, location: loc.label,
     });
     const outlookHref = makeOutlookHref({
-      title: et.title, description: et.description || '',
+      title: et.title, description: stripHtml(et.description),
       start, end, location: loc.label,
     });
 
