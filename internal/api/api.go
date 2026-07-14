@@ -186,7 +186,7 @@ func (a *API) handleListEventTypes(e *core.RequestEvent) error {
 			DurationMin: et.DurationMin, LocationType: et.LocationType,
 			PaymentMode: et.PaymentMode, PaymentAmount: et.PaymentAmount,
 			PaymentCurrency: et.PaymentCurrency, BrandColor: et.BrandColor,
-			HostName: host.Name, HostSlug: host.Email,
+			HostName: host.Name, HostSlug: hostPublicSlug(host),
 		})
 	}
 	return e.JSON(http.StatusOK, map[string]any{"event_types": out})
@@ -552,10 +552,28 @@ func (a *API) verifyTokenForBooking(e *core.RequestEvent, bookingID string, acti
 	return nil
 }
 
+// hostPublicSlug is the host identifier we hand out in public URLs: the slug
+// when the host has one, otherwise the email. Falling back to the email keeps
+// clients that were built against the pre-slug API working unchanged.
+func hostPublicSlug(h store.Host) string {
+	if h.Slug != "" {
+		return h.Slug
+	}
+	return h.Email
+}
+
+// findHostBySlug resolves the {host} segment of a public booking URL. It
+// accepts, in order: the host's slug, their email, or their record ID.
+//
+// A slug can never contain '@' (see the users.slug pattern), so slugs and
+// emails cannot collide — and skipping the slug lookup for anything that looks
+// like an email saves a query on the still-common email links.
 func (a *API) findHostBySlug(slugOrEmail string) (store.Host, error) {
-	// Hosts have no slug field yet (Phase 2 keeps things simple — use the
-	// email local-part as URL slug for now). Phase 4 should add a proper
-	// slug field on users with uniqueness + reservation.
+	if !strings.Contains(slugOrEmail, "@") {
+		if host, err := a.Repo.FindHostBySlug(slugOrEmail); err == nil {
+			return host, nil
+		}
+	}
 	host, err := a.Repo.FindHostByEmail(slugOrEmail)
 	if err == nil {
 		return host, nil

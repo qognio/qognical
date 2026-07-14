@@ -37,9 +37,13 @@ func (r *Repo) WithTx(txApp core.App) *Repo { return &Repo{app: txApp} }
 // ----- users (hosts) -----
 
 type Host struct {
-	ID       string
-	Email    string
-	Name     string
+	ID    string
+	Email string
+	Name  string
+	// Slug is the host's public URL segment (/book/{Slug}/{event}). Optional:
+	// hosts without one are still addressable by email, so links minted before
+	// slugs existed keep working.
+	Slug     string
 	Timezone string
 	Role     string
 }
@@ -56,6 +60,7 @@ func recordToHost(r *core.Record) Host {
 		ID:       r.Id,
 		Email:    r.Email(),
 		Name:     r.GetString("name"),
+		Slug:     r.GetString("slug"),
 		Timezone: r.GetString("timezone"),
 		Role:     r.GetString("role"),
 	}
@@ -72,6 +77,20 @@ func (r *Repo) FindHostByID(id string) (Host, error) {
 // FindHostByEmail looks up a host (any role) by their PocketBase auth email.
 func (r *Repo) FindHostByEmail(email string) (Host, error) {
 	rec, err := r.app.FindAuthRecordByEmail(migrations.CollUsers, email)
+	if err != nil {
+		return Host{}, err
+	}
+	return recordToHost(rec), nil
+}
+
+// FindHostBySlug looks up a host by their public URL slug. An empty slug must
+// never match — many hosts legitimately have none, and matching "" would hand
+// out an arbitrary one of them.
+func (r *Repo) FindHostBySlug(slug string) (Host, error) {
+	if slug == "" {
+		return Host{}, errors.New("empty host slug")
+	}
+	rec, err := r.app.FindFirstRecordByData(migrations.CollUsers, "slug", slug)
 	if err != nil {
 		return Host{}, err
 	}
