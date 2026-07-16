@@ -164,16 +164,23 @@ func (a *API) authUserID(e *core.RequestEvent) string {
 // requireHostRole blocks viewer/non-host users from write endpoints. Viewers
 // can read team data but must not author event-types, change availability,
 // or wire up integrations under their own name.
-func (a *API) requireHostRole(e *core.RequestEvent) error {
+//
+// Returns false with the error response ALREADY WRITTEN; callers must
+// `return nil` then. (Was error-returning before, but writeErr returns
+// e.JSON's nil → the `err != nil` guards never fired and viewers could
+// write despite the 403 — same class of bug as verifyTokenForBooking,
+// fixed 2026-07-16.)
+func (a *API) requireHostRole(e *core.RequestEvent) bool {
 	if e.Auth == nil {
-		return writeErr(e, http.StatusUnauthorized, CodeTokenInvalid, "no auth", nil)
+		writeErr(e, http.StatusUnauthorized, CodeTokenInvalid, "no auth", nil)
+		return false
 	}
-	role := e.Auth.GetString("role")
-	if role != "host" {
-		return writeErr(e, http.StatusForbidden, CodeTokenInvalid,
+	if e.Auth.GetString("role") != "host" {
+		writeErr(e, http.StatusForbidden, CodeTokenInvalid,
 			"host role required for this action", nil)
+		return false
 	}
-	return nil
+	return true
 }
 
 // --- /me
@@ -376,7 +383,9 @@ type eventTypeInput struct {
 }
 
 func (a *API) hostCreateEventType(e *core.RequestEvent) error {
-	if err := a.requireHostRole(e); err != nil { return err }
+	if !a.requireHostRole(e) {
+		return nil
+	} // error response already written
 	uid := a.authUserID(e)
 	var in eventTypeInput
 	if err := json.NewDecoder(e.Request.Body).Decode(&in); err != nil {
@@ -439,7 +448,9 @@ func (a *API) hostCreateEventType(e *core.RequestEvent) error {
 }
 
 func (a *API) hostUpdateEventType(e *core.RequestEvent) error {
-	if err := a.requireHostRole(e); err != nil { return err }
+	if !a.requireHostRole(e) {
+		return nil
+	} // error response already written
 	uid := a.authUserID(e)
 	id := e.Request.PathValue("id")
 	r, err := e.App.FindRecordById(migrations.CollEventTypes, id)
@@ -471,7 +482,9 @@ func (a *API) hostUpdateEventType(e *core.RequestEvent) error {
 }
 
 func (a *API) hostDeleteEventType(e *core.RequestEvent) error {
-	if err := a.requireHostRole(e); err != nil { return err }
+	if !a.requireHostRole(e) {
+		return nil
+	} // error response already written
 	uid := a.authUserID(e)
 	id := e.Request.PathValue("id")
 	r, err := e.App.FindRecordById(migrations.CollEventTypes, id)
@@ -527,7 +540,9 @@ func (a *API) hostListAvailability(e *core.RequestEvent) error {
 }
 
 func (a *API) hostReplaceAvailability(e *core.RequestEvent) error {
-	if err := a.requireHostRole(e); err != nil { return err }
+	if !a.requireHostRole(e) {
+		return nil
+	} // error response already written
 	uid := a.authUserID(e)
 	var in []struct {
 		Weekday int    `json:"weekday"`
@@ -621,7 +636,9 @@ func (a *API) hostListDateOverrides(e *core.RequestEvent) error {
 }
 
 func (a *API) hostCreateDateOverride(e *core.RequestEvent) error {
-	if err := a.requireHostRole(e); err != nil { return err }
+	if !a.requireHostRole(e) {
+		return nil
+	} // error response already written
 	uid := a.authUserID(e)
 	var in struct {
 		Date  string `json:"date"`
@@ -654,7 +671,9 @@ func (a *API) hostCreateDateOverride(e *core.RequestEvent) error {
 }
 
 func (a *API) hostDeleteDateOverride(e *core.RequestEvent) error {
-	if err := a.requireHostRole(e); err != nil { return err }
+	if !a.requireHostRole(e) {
+		return nil
+	} // error response already written
 	uid := a.authUserID(e)
 	id := e.Request.PathValue("id")
 	r, err := e.App.FindRecordById(migrations.CollDateOverrides, id)
@@ -693,7 +712,9 @@ func (a *API) hostListIntegrations(e *core.RequestEvent) error {
 }
 
 func (a *API) hostCreateMSGraphIntegration(e *core.RequestEvent) error {
-	if err := a.requireHostRole(e); err != nil { return err }
+	if !a.requireHostRole(e) {
+		return nil
+	} // error response already written
 	uid := a.authUserID(e)
 	var in struct {
 		TenantID     string `json:"tenant_id"`
@@ -709,6 +730,18 @@ func (a *API) hostCreateMSGraphIntegration(e *core.RequestEvent) error {
 			"tenant_id, client_id, client_secret, user_id required", nil)
 	}
 	credsJSON, err := json.Marshal(in)
+	if err != nil {
+		return writeErr(e, http.StatusInternalServerError, CodeInternalError, err.Error(), nil)
+	}
+	// Encrypt at rest — the adapter registry DECRYPTS credentials on load, so
+	// plaintext rows fail to decrypt and every meeting/calendar call dies
+	// silently (found 2026-07-16: host-API-created integrations never worked;
+	// only the CLI path encrypted). Same crypto as `qognical integrations set`.
+	if a.Master == nil {
+		return writeErr(e, http.StatusInternalServerError, CodeInternalError,
+			"encryption key not configured", nil)
+	}
+	ciphertext, err := a.Master.Encrypt(credsJSON)
 	if err != nil {
 		return writeErr(e, http.StatusInternalServerError, CodeInternalError, err.Error(), nil)
 	}
@@ -728,7 +761,7 @@ func (a *API) hostCreateMSGraphIntegration(e *core.RequestEvent) error {
 		r.Set("owner", uid)
 		r.Set("provider", "msgraph")
 	}
-	r.Set("credentials", string(credsJSON))
+	r.Set("credentials", ciphertext)
 	r.Set("config", "{}")
 	r.Set("sync_enabled", true)
 	r.Set("last_error", "")
@@ -743,7 +776,9 @@ func (a *API) hostCreateMSGraphIntegration(e *core.RequestEvent) error {
 }
 
 func (a *API) hostDeleteIntegration(e *core.RequestEvent) error {
-	if err := a.requireHostRole(e); err != nil { return err }
+	if !a.requireHostRole(e) {
+		return nil
+	} // error response already written
 	uid := a.authUserID(e)
 	id := e.Request.PathValue("id")
 	r, err := e.App.FindRecordById(migrations.CollIntegrations, id)

@@ -36,11 +36,11 @@ func (a *API) requireSuperuser(e *core.RequestEvent) error {
 }
 
 type serviceTokenCreateReq struct {
-	Name              string   `json:"name"`
-	Scopes            []string `json:"scopes"`
-	HostBinding       string   `json:"host_binding,omitempty"`
+	Name               string   `json:"name"`
+	Scopes             []string `json:"scopes"`
+	HostBinding        string   `json:"host_binding,omitempty"`
 	EventTypeAllowlist []string `json:"event_type_allowlist,omitempty"`
-	ExpiresAt         string   `json:"expires_at,omitempty"`
+	ExpiresAt          string   `json:"expires_at,omitempty"`
 }
 
 type serviceTokenCreateResp struct {
@@ -107,9 +107,9 @@ func (a *API) handleServiceTokenList(e *core.RequestEvent) error {
 	for _, t := range tokens {
 		m := map[string]any{
 			"id": t.ID, "name": t.Name, "scopes": t.Scopes,
-			"host_binding": t.HostBinding,
+			"host_binding":         t.HostBinding,
 			"event_type_allowlist": t.EventTypeAllowlist,
-			"created_by": t.CreatedBy,
+			"created_by":           t.CreatedBy,
 		}
 		if !t.ExpiresAt.IsZero() {
 			m["expires_at"] = t.ExpiresAt

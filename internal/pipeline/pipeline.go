@@ -105,14 +105,14 @@ func (p *Pipeline) WithClock(clock func() time.Time) *Pipeline {
 
 // Errors mirror the public-API error codes in Doc 06.
 var (
-	ErrEventTypeInactive     = errors.New("event_type_inactive")
+	ErrEventTypeInactive       = errors.New("event_type_inactive")
 	ErrSlotOutsideAvailability = errors.New("slot_outside_availability")
-	ErrSlotUnavailable       = errors.New("slot_unavailable")
-	ErrSlotTooSoon           = errors.New("slot_too_soon")
-	ErrSlotTooFar            = errors.New("slot_too_far")
-	ErrInvalidRequest        = errors.New("invalid_request")
-	ErrIntakeValidation      = errors.New("intake_validation_failed")
-	ErrCapacityFull          = errors.New("slot_capacity_full")
+	ErrSlotUnavailable         = errors.New("slot_unavailable")
+	ErrSlotTooSoon             = errors.New("slot_too_soon")
+	ErrSlotTooFar              = errors.New("slot_too_far")
+	ErrInvalidRequest          = errors.New("invalid_request")
+	ErrIntakeValidation        = errors.New("intake_validation_failed")
+	ErrCapacityFull            = errors.New("slot_capacity_full")
 )
 
 // Run executes the full creation pipeline.
@@ -316,7 +316,16 @@ func (p *Pipeline) confirmTail(b store.Booking, et store.EventType, host store.H
 
 	// Calendar / Meeting in one shot when the calendar adapter natively
 	// hosts the meeting (MS Graph → Teams Weg 1, Google → Google Meet).
-	calProv, _ := p.registryFor(host.ID)
+	// The load error must NOT be discarded: a decrypt failure (e.g. the
+	// plaintext-credentials bug fixed 2026-07-16) otherwise degrades every
+	// booking to "confirmed without meeting" with zero trace. The booking
+	// still confirms (INV-5: meeting creation is best-effort), but loudly.
+	calProv, calErr := p.registryFor(host.ID)
+	if calErr != nil {
+		slog.Error("calendar integration load failed — booking will confirm WITHOUT meeting",
+			"booking", b.ID, "host", host.ID, "err", calErr)
+		p.recordIntegrationError(host.ID, "load: "+calErr.Error())
+	}
 	inlineMeeting := false
 	if calProv != nil {
 		switch {
@@ -340,10 +349,13 @@ func (p *Pipeline) confirmTail(b store.Booking, et store.EventType, host store.H
 	if calProv != nil {
 		created, err := calProv.CreateEvent(ctx, cev)
 		if err != nil {
-			slog.Warn("calendar create failed", "booking", b.ID, "err", err)
+			slog.Error("calendar create failed — booking confirms WITHOUT meeting",
+				"booking", b.ID, "host", host.ID, "provider", calProv.Name(), "err", err)
+			p.recordIntegrationError(host.ID, calProv.Name()+": "+err.Error())
 		} else {
 			externalID = created.ExternalID
 			meetingURL = created.MeetingURL
+			p.recordIntegrationError(host.ID, "") // clear stale last_error
 		}
 	}
 	// Standalone meeting providers (calendar adapter didn't supply a URL).
@@ -377,6 +389,15 @@ func (p *Pipeline) confirmTail(b store.Booking, et store.EventType, host store.H
 		b.MeetingJoinURL = meetingURL
 	}
 	return p.notifyConfirmed(b, et, host, tok)
+}
+
+// recordIntegrationError persists msg to last_error on the host's calendar
+// integration row(s) so failures surface in the host UI/CLI, not only in
+// logs. Empty msg clears a stale error. Best-effort by design.
+func (p *Pipeline) recordIntegrationError(hostID, msg string) {
+	if err := p.repo.SetCalendarIntegrationError(hostID, msg); err != nil {
+		slog.Warn("could not persist integration last_error", "host", hostID, "err", err)
+	}
 }
 
 // registryFor returns (calendar provider for host, ok). Returns nil if no

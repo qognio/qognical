@@ -26,7 +26,6 @@ import (
 	"github.com/pocketbase/pocketbase/plugins/migratecmd"
 	"github.com/spf13/cobra"
 
-
 	"github.com/qognio/qognical/internal/adapters"
 	"github.com/qognio/qognical/internal/adapters/google"
 	"github.com/qognio/qognical/internal/adapters/jitsi"
@@ -39,8 +38,8 @@ import (
 	"github.com/qognio/qognical/internal/captcha"
 	"github.com/qognio/qognical/internal/cli"
 	"github.com/qognio/qognical/internal/config"
-	"github.com/qognio/qognical/internal/crypto"
 	"github.com/qognio/qognical/internal/cron"
+	"github.com/qognio/qognical/internal/crypto"
 	"github.com/qognio/qognical/internal/dsgvo"
 	"github.com/qognio/qognical/internal/health"
 	"github.com/qognio/qognical/internal/notifier"
@@ -108,6 +107,7 @@ func main() {
 		pipe       *pipeline.Pipeline
 		tokenSvc   *token.Service
 		cfgGlobal  *config.Config
+		master     *crypto.Master
 		stripeProv adapters.PaymentProvider
 		paypalProv adapters.PaymentProvider
 		dispatcher *webhooks.Dispatcher
@@ -115,7 +115,7 @@ func main() {
 	if needsStrictConfig(os.Args[1:]) {
 		// Re-load (cheap; pure env reads). LoadStrict was already called above.
 		cfgGlobal, _ = config.LoadStrict()
-		master, _ := crypto.NewMaster(cfgGlobal.EncryptionKey)
+		master, _ = crypto.NewMaster(cfgGlobal.EncryptionKey)
 		tokenSvc = token.New(master)
 		repo = store.New(app)
 
@@ -149,6 +149,7 @@ func main() {
 				Repo:               repo,
 				Tokens:             tokenSvc,
 				Pipeline:           pipe,
+				Master:             master,
 				CORSAllowedOrigins: cfgGlobal.CORSAllowedOrigins,
 				Captcha:            captcha.New(cfgGlobal.CaptchaProvider, cfgGlobal.CaptchaSecret),
 				ReadLimiter:        readLim,

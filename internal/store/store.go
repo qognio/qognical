@@ -100,26 +100,26 @@ func (r *Repo) FindHostBySlug(slug string) (Host, error) {
 // ----- event_types -----
 
 type EventType struct {
-	ID                string
-	OwnerID            string
-	Slug               string
-	Title              string
-	Description        string
-	DurationMin        int
-	BufferBeforeMin    int
-	BufferAfterMin     int
-	MinNoticeMin       int
-	MaxHorizonDays     int
-	LocationType       string
-	MeetingConfig      types.JSONRaw
-	IntakeSchema       types.JSONRaw
-	PaymentMode        string
-	PaymentAmount      int
-	PaymentCurrency    string
-	PaymentProvider    string
-	StripePriceID      string
-	SchemaVersion      int
-	Active             bool
+	ID              string
+	OwnerID         string
+	Slug            string
+	Title           string
+	Description     string
+	DurationMin     int
+	BufferBeforeMin int
+	BufferAfterMin  int
+	MinNoticeMin    int
+	MaxHorizonDays  int
+	LocationType    string
+	MeetingConfig   types.JSONRaw
+	IntakeSchema    types.JSONRaw
+	PaymentMode     string
+	PaymentAmount   int
+	PaymentCurrency string
+	PaymentProvider string
+	StripePriceID   string
+	SchemaVersion   int
+	Active          bool
 
 	// v1.1 additions
 	Hosts              []string
@@ -720,6 +720,31 @@ func (r *Repo) PersistBookingExternals(bookingID, externalCalendarID, provider, 
 	return r.app.Save(rec)
 }
 
+// SetCalendarIntegrationError persists msg to last_error on the owner's
+// calendar-family integration rows (msgraph/nextcloud/google), so a failing
+// meeting/calendar sync is visible outside the logs. Empty msg clears the
+// field. Called best-effort from the pipeline confirm-tail (2026-07-16 —
+// before this, decrypt/create failures were invisible: bookings confirmed
+// silently without a meeting).
+func (r *Repo) SetCalendarIntegrationError(ownerID, msg string) error {
+	recs, err := r.app.FindRecordsByFilter(migrations.CollIntegrations,
+		"owner = {:owner} && (provider = 'msgraph' || provider = 'nextcloud' || provider = 'google')",
+		"", 10, 0, dbx.Params{"owner": ownerID})
+	if err != nil {
+		return err
+	}
+	for _, rec := range recs {
+		if rec.GetString("last_error") == msg {
+			continue
+		}
+		rec.Set("last_error", msg)
+		if err := r.app.Save(rec); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // ReplaceStartEnd is used by reschedule; it updates start/end + bumps token.
 func (r *Repo) ReplaceStartEnd(id string, newStart, newEnd time.Time) (Booking, error) {
 	var out Booking
@@ -801,15 +826,15 @@ func (r *Repo) FindIntegrationCredentials(hostID, provider string) (string, []by
 // ----- service_tokens -----
 
 type ServiceTokenRecord struct {
-	ID                  string
-	Name                string
-	Scopes              []string
-	HostBinding         string
-	EventTypeAllowlist  []string
-	CreatedBy           string
-	ExpiresAt           time.Time
-	LastUsedAt          time.Time
-	RevokedAt           time.Time
+	ID                 string
+	Name               string
+	Scopes             []string
+	HostBinding        string
+	EventTypeAllowlist []string
+	CreatedBy          string
+	ExpiresAt          time.Time
+	LastUsedAt         time.Time
+	RevokedAt          time.Time
 }
 
 func (r *Repo) FindServiceTokenByHash(hash string) (ServiceTokenRecord, bool, error) {

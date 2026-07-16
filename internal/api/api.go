@@ -13,14 +13,15 @@ import (
 
 	"github.com/pocketbase/pocketbase/core"
 
+	"github.com/qognio/qognical/internal/crypto"
 	"github.com/qognio/qognical/internal/i18n"
 	"github.com/qognio/qognical/internal/intake"
 	"github.com/qognio/qognical/internal/pipeline"
 	"github.com/qognio/qognical/internal/slot"
-	"github.com/qognio/qognical/internal/timeutil"
 	"github.com/qognio/qognical/internal/state"
 	"github.com/qognio/qognical/internal/store"
 	"github.com/qognio/qognical/internal/svctoken"
+	"github.com/qognio/qognical/internal/timeutil"
 	"github.com/qognio/qognical/internal/token"
 )
 
@@ -29,6 +30,7 @@ type API struct {
 	Repo               *store.Repo
 	Tokens             *token.Service
 	Pipeline           *pipeline.Pipeline
+	Master             *crypto.Master // encrypts integration credentials at rest
 	CORSAllowedOrigins []string
 	Captcha            CaptchaVerifier // optional; nil = no captcha enforcement
 	ReadLimiter        RateLimiter     // optional; nil = no limit
@@ -436,8 +438,8 @@ type cancelReq struct {
 
 func (a *API) handleCancel(e *core.RequestEvent) error {
 	id := e.Request.PathValue("id")
-	if err := a.verifyTokenForBooking(e, id, token.ActionCancel); err != nil {
-		return err
+	if !a.verifyTokenForBooking(e, id, token.ActionCancel) {
+		return nil // error response already written
 	}
 	var req cancelReq
 	_ = e.BindBody(&req)
@@ -455,8 +457,8 @@ type rescheduleReq struct {
 
 func (a *API) handleReschedule(e *core.RequestEvent) error {
 	id := e.Request.PathValue("id")
-	if err := a.verifyTokenForBooking(e, id, token.ActionReschedule); err != nil {
-		return err
+	if !a.verifyTokenForBooking(e, id, token.ActionReschedule) {
+		return nil // error response already written
 	}
 	var req rescheduleReq
 	if err := e.BindBody(&req); err != nil || req.NewStartUTC.IsZero() {
@@ -479,8 +481,8 @@ func (a *API) handleReschedule(e *core.RequestEvent) error {
 
 func (a *API) handleGetBooking(e *core.RequestEvent) error {
 	id := e.Request.PathValue("id")
-	if err := a.verifyTokenForBooking(e, id, token.ActionView); err != nil {
-		return err
+	if !a.verifyTokenForBooking(e, id, token.ActionView) {
+		return nil // error response already written
 	}
 	b, err := a.Repo.FindBookingByID(id)
 	if err != nil {
@@ -511,45 +513,66 @@ func (a *API) handleGetBooking(e *core.RequestEvent) error {
 
 // ----- helpers -----
 
-func (a *API) verifyTokenForBooking(e *core.RequestEvent, bookingID string, action token.Action) error {
+// verifyTokenForBooking authorizes `action` on `bookingID` from the request's
+// booking token. It returns false — with the error response ALREADY WRITTEN —
+// when the request is not authorized; callers must `return nil` in that case.
+//
+// SECURITY (2026-07-16): this was previously `error`-returning and fed the
+// result of writeErr straight through — but writeErr returns e.JSON's nil on
+// success, so `if err != nil { return err }` guards NEVER fired and every
+// handler kept executing after the 4xx was written. Net effect: ANY token
+// (including garbage) could cancel/reschedule any known booking id. The bool
+// contract makes the outcome explicit and impossible to ignore accidentally.
+func (a *API) verifyTokenForBooking(e *core.RequestEvent, bookingID string, action token.Action) bool {
 	tok := e.Request.Header.Get("X-Booking-Token")
 	if tok == "" {
 		tok = e.Request.URL.Query().Get("token")
 	}
 	if tok == "" {
-		return writeErr(e, httpStatusFor(CodeTokenInvalid), CodeTokenInvalid, "token required", nil)
+		writeErr(e, httpStatusFor(CodeTokenInvalid), CodeTokenInvalid, "token required", nil)
+		return false
 	}
 	b, err := a.Repo.FindBookingByID(bookingID)
 	if err != nil {
 		// Don't leak existence: same error code for missing booking.
-		return writeErr(e, httpStatusFor(CodeTokenInvalid), CodeTokenInvalid, "invalid token", nil)
+		writeErr(e, httpStatusFor(CodeTokenInvalid), CodeTokenInvalid, "invalid token", nil)
+		return false
 	}
 	tokenBookingID, tokenAction, err := a.Tokens.Verify(tok, b.CancelTokenHash)
 	if err != nil {
-		return writeErr(e, httpStatusFor(mapTokenErr(err)), mapTokenErr(err), err.Error(), nil)
+		writeErr(e, httpStatusFor(mapTokenErr(err)), mapTokenErr(err), err.Error(), nil)
+		return false
 	}
 	if tokenBookingID != bookingID {
-		return writeErr(e, httpStatusFor(CodeTokenInvalid), CodeTokenInvalid, "token-booking mismatch", nil)
+		writeErr(e, httpStatusFor(CodeTokenInvalid), CodeTokenInvalid, "token-booking mismatch", nil)
+		return false
 	}
-	// Authorize the requested action against the token's authority:
-	//   - View tokens may only read.
-	//   - Cancel and Reschedule tokens additionally authorize View (any
-	//     mutate-capable link sent to an invitee should also let them
-	//     read the booking they're about to mutate).
-	//   - A Cancel token cannot reschedule; a Reschedule token cannot cancel.
-	switch action {
+	if !tokenAuthorizes(tokenAction, action) {
+		writeErr(e, httpStatusFor(CodeTokenInvalid), CodeTokenInvalid,
+			"token does not authorize "+string(action), nil)
+		return false
+	}
+	return true
+}
+
+// tokenAuthorizes decides whether a token minted for `granted` may perform
+// `requested`. Policy (matches what the product actually issues and promises):
+//   - The pipeline only ever mints ONE invitee token: the manage/view token
+//     (confirmation mail: "verwalten (verschieben oder absagen)"). A view
+//     token therefore carries full manage authority: view+cancel+reschedule.
+//   - Action-specific tokens stay exclusive: a cancel token cannot
+//     reschedule and vice versa (both may still view).
+func tokenAuthorizes(granted, requested token.Action) bool {
+	switch requested {
 	case token.ActionView:
-		// any non-revoked token authorizes view
+		return true // any non-revoked booking token authorizes view
 	case token.ActionCancel:
-		if tokenAction != token.ActionCancel {
-			return writeErr(e, httpStatusFor(CodeTokenInvalid), CodeTokenInvalid, "token does not authorize cancel", nil)
-		}
+		return granted == token.ActionCancel || granted == token.ActionView
 	case token.ActionReschedule:
-		if tokenAction != token.ActionReschedule {
-			return writeErr(e, httpStatusFor(CodeTokenInvalid), CodeTokenInvalid, "token does not authorize reschedule", nil)
-		}
+		return granted == token.ActionReschedule || granted == token.ActionView
+	default:
+		return false
 	}
-	return nil
 }
 
 // hostPublicSlug is the host identifier we hand out in public URLs: the slug

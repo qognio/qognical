@@ -26,7 +26,7 @@ func (p *Pipeline) notifyApprovalRequest(b store.Booking, et store.EventType, ho
 		InviteeName: b.InviteeName, InviteeEmail: b.InviteeEmail,
 		StartUTC: b.StartUTC, EndUTC: b.EndUTC,
 		InviteeTZ: b.InviteeTimezone,
-		ManageURL: approveURL,   // overload: host email's primary CTA = approve
+		ManageURL: approveURL, // overload: host email's primary CTA = approve
 		BaseURL:   p.baseURL,
 	}
 	if err := p.notifier.SendApprovalRequest(hostMail, declineURL); err != nil {
