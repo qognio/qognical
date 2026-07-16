@@ -87,6 +87,22 @@ func ActiveStatuses() []Status {
 	}
 }
 
+// ActiveStatusSQLList renders ActiveStatuses() as a SQL IN(...) value list,
+// e.g. "'draft','pending_approval',...". Slot/busy/capacity queries MUST use
+// this instead of a hand-typed string so the set can never drift from
+// ActiveStatuses() again (2026-07-16: several filters silently omitted
+// pending_approval → approval bookings didn't hold their slot → doppelbuchung).
+func ActiveStatusSQLList() string {
+	out := ""
+	for i, s := range ActiveStatuses() {
+		if i > 0 {
+			out += ","
+		}
+		out += "'" + string(s) + "'"
+	}
+	return out
+}
+
 // IsTerminal returns true if no further transitions are possible.
 func IsTerminal(s Status) bool {
 	switch s {

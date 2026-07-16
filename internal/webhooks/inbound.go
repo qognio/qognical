@@ -20,8 +20,8 @@ import (
 // pipeline.
 type Inbound struct {
 	Repo            *store.Repo
-	Stripe          adapters.PaymentProvider // optional
-	PayPal          adapters.PaymentProvider // optional
+	Stripe          adapters.PaymentProvider                                  // optional
+	PayPal          adapters.PaymentProvider                                  // optional
 	OnPaymentResult func(ctx context.Context, ev adapters.WebhookEvent) error // glue into pipeline
 }
 
@@ -34,9 +34,14 @@ func (i *Inbound) Register(se *core.ServeEvent) {
 	}
 }
 
+// maxWebhookBody caps the payment-webhook body BEFORE signature verification —
+// the endpoint is anonymous, so an unbounded io.ReadAll was a memory-DoS vector
+// (2026-07-16). 1 MiB is well above any real Stripe/PayPal event.
+const maxWebhookBody = 1 << 20
+
 func (i *Inbound) handle(prov adapters.PaymentProvider, name string) func(e *core.RequestEvent) error {
 	return func(e *core.RequestEvent) error {
-		raw, err := io.ReadAll(e.Request.Body)
+		raw, err := io.ReadAll(http.MaxBytesReader(e.Response, e.Request.Body, maxWebhookBody))
 		if err != nil {
 			return e.NoContent(http.StatusBadRequest)
 		}

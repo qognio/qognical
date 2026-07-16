@@ -370,7 +370,7 @@ func (r *Repo) CountActiveAtSlot(eventTypeID string, start, end time.Time) (int,
 	recs, err := r.app.FindAllRecords(migrations.CollBookings,
 		dbx.HashExp{"event_type": eventTypeID},
 		dbx.NewExp("start_utc = {:s}", dbx.Params{"s": mustDateTime(start)}),
-		dbx.NewExp("status IN ('draft','pending_approval','pending_payment','processing','confirmed')"),
+		dbx.NewExp("status IN ("+state.ActiveStatusSQLList()+")"),
 	)
 	if err != nil {
 		return 0, err
@@ -386,7 +386,7 @@ func (r *Repo) HostLoadInWindow(hostIDs []string, from, to time.Time) (map[strin
 		out[h] = 0
 		recs, err := r.app.FindAllRecords(migrations.CollBookings,
 			dbx.HashExp{"host": h},
-			dbx.NewExp("status IN ('draft','pending_approval','pending_payment','processing','confirmed')"),
+			dbx.NewExp("status IN ("+state.ActiveStatusSQLList()+")"),
 			dbx.NewExp("start_utc >= {:from} AND start_utc < {:to}",
 				dbx.Params{"from": from, "to": to}),
 		)
@@ -562,7 +562,7 @@ func (r *Repo) FindBookingByID(id string) (Booking, error) {
 func (r *Repo) ActiveBusyForHost(hostID string, from, to time.Time) ([]timeutil.Interval, error) {
 	recs, err := r.app.FindAllRecords(migrations.CollBookings,
 		dbx.HashExp{"host": hostID},
-		dbx.NewExp("status IN ('draft','pending_payment','processing','confirmed')"),
+		dbx.NewExp("status IN ("+state.ActiveStatusSQLList()+")"),
 		dbx.NewExp("end_utc > {:from} AND start_utc < {:to}", dbx.Params{"from": from, "to": to}),
 	)
 	if err != nil {
@@ -601,15 +601,25 @@ type BookingDraft struct {
 	// v1.1: group-event sessions share the same id across attendees of the
 	// same slot (event_id + start_utc). Empty for single-attendee events.
 	GroupSessionID string
+
+	// Capacity lets ReserveBookingTx enforce group capacity INSIDE the
+	// transaction (uses EventTypeID above). Capacity <= 1 = single-attendee
+	// (host-overlap check applies instead).
+	Capacity int
 }
+
+// ErrCapacityFull is returned by ReserveBookingTx when a group slot is full.
+var ErrCapacityFull = errors.New("slot capacity full")
 
 // ReserveBookingTx enforces INV-1 inside a transaction: re-query active
 // bookings for the host and slot window, and fail if any overlap. If clear,
 // insert the new booking. Returns the persisted Booking.
 //
-// v1.1: when draft.GroupSessionID is set, we skip the overlap check (the
-// host can have multiple bookings on the same slot for a group event;
-// capacity has already been verified upstream).
+// v1.1 group events (Capacity > 1) skip the host-overlap check but must not
+// exceed Capacity. The count is done INSIDE the tx AFTER the insert: the
+// INSERT takes SQLite's write lock, so concurrent reservations serialize and
+// each sees the committed rows of the ones before it — closing the TOCTOU
+// where a pre-insert count let two racers both take the last seat (2026-07-16).
 func (r *Repo) ReserveBookingTx(draft BookingDraft) (Booking, error) {
 	var out Booking
 	err := r.app.RunInTransaction(func(txApp core.App) error {
@@ -634,6 +644,18 @@ func (r *Repo) ReserveBookingTx(draft BookingDraft) (Booking, error) {
 		applyDraft(rec, draft)
 		if err := txApp.Save(rec); err != nil {
 			return fmt.Errorf("save booking: %w", err)
+		}
+		// Group capacity, authoritatively: our row is now written and holds the
+		// write lock. Count active bookings on this slot (incl. ours) and roll
+		// back if we pushed it over capacity.
+		if draft.GroupSessionID != "" && draft.Capacity > 1 {
+			count, err := r.WithTx(txApp).CountActiveAtSlot(draft.EventTypeID, draft.StartUTC, draft.EndUTC)
+			if err != nil {
+				return err
+			}
+			if count > draft.Capacity {
+				return ErrCapacityFull
+			}
 		}
 		out = recordToBooking(rec)
 		return nil
@@ -774,7 +796,7 @@ func (r *Repo) ReplaceStartEnd(id string, newStart, newEnd time.Time) (Booking, 
 		recs, err := txApp.FindAllRecords(migrations.CollBookings,
 			dbx.HashExp{"host": host},
 			dbx.NewExp("id != {:self}", dbx.Params{"self": bookingID}),
-			dbx.NewExp("status IN ('draft','pending_payment','processing','confirmed')"),
+			dbx.NewExp("status IN ("+state.ActiveStatusSQLList()+")"),
 			dbx.NewExp("end_utc > {:from} AND start_utc < {:to}", dbx.Params{"from": newStart, "to": newEnd}),
 		)
 		if err != nil {

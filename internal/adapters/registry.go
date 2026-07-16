@@ -13,8 +13,8 @@ import (
 // implementation. Returning nil for "not configured" is the way callers see
 // the optional-integration story — the pipeline simply skips the step.
 type Registry struct {
-	repo    *store.Repo
-	master  *crypto.Master
+	repo     *store.Repo
+	master   *crypto.Master
 	calendar map[string]CalendarFactory
 	meeting  map[string]MeetingFactory
 	payment  map[string]PaymentFactory

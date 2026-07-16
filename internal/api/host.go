@@ -35,9 +35,16 @@ func (a *API) RegisterTeam(se *core.ServeEvent) {
 	g.GET("/hosts", a.teamHosts)
 }
 
+// svcTokenCtxKey is the request-context key under which requireServiceTokenRead
+// stashes the resolved token so the team handlers can enforce its bindings.
+const svcTokenCtxKey = "qognical.svctoken"
+
 // requireServiceTokenRead validates the Authorization header against the
-// svctoken store and ensures it carries the bookings:read scope. Stashes the
-// resolved token in the request context for downstream handlers if needed.
+// svctoken store and ensures it carries the bookings:read scope. It stashes the
+// resolved token in the request context so downstream handlers can enforce the
+// token's host_binding / event_type_allowlist (SECURITY 2026-07-16: they were
+// verified for scope but then discarded, so a host-bound token could read
+// EVERY host's bookings + PII via /api/team/v1/*).
 func (a *API) requireServiceTokenRead(e *core.RequestEvent) error {
 	hdr := e.Request.Header.Get("Authorization")
 	if hdr == "" {
@@ -50,6 +57,7 @@ func (a *API) requireServiceTokenRead(e *core.RequestEvent) error {
 	if !st.HasScope(svctoken.ScopeBookingsRead) {
 		return writeErr(e, http.StatusForbidden, CodeTokenInvalid, "scope bookings:read required", nil)
 	}
+	e.Set(svcTokenCtxKey, st)
 	return e.Next()
 }
 
@@ -67,6 +75,12 @@ func (a *API) teamBookings(e *core.RequestEvent) error {
 	if to != "" {
 		filter += " && start_utc < {:to}"
 		params["to"] = to
+	}
+	// Enforce the token's host binding — a host-scoped token must not read
+	// other hosts' bookings.
+	if st, ok := e.Get(svcTokenCtxKey).(*svctoken.Resolved); ok && st.Token.HostBinding != "" {
+		filter += " && host = {:hb}"
+		params["hb"] = st.Token.HostBinding
 	}
 	recs, err := e.App.FindRecordsByFilter(migrations.CollBookings, filter, "start_utc", 500, 0, params)
 	if err != nil {
@@ -107,8 +121,15 @@ func (a *API) teamBookings(e *core.RequestEvent) error {
 }
 
 func (a *API) teamHosts(e *core.RequestEvent) error {
+	filter := "role = 'host'"
+	params := dbx.Params{}
+	// A host-bound token sees only its own host, not the whole roster.
+	if st, ok := e.Get(svcTokenCtxKey).(*svctoken.Resolved); ok && st.Token.HostBinding != "" {
+		filter += " && id = {:hb}"
+		params["hb"] = st.Token.HostBinding
+	}
 	recs, err := e.App.FindRecordsByFilter(migrations.CollUsers,
-		"role = 'host'", "name", 200, 0, dbx.Params{})
+		filter, "name", 200, 0, params)
 	if err != nil {
 		return writeErr(e, http.StatusInternalServerError, CodeInternalError, err.Error(), nil)
 	}

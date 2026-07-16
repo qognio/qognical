@@ -186,14 +186,20 @@ func (p *Pipeline) Run(req Request) (Result, error) {
 		PaymentStatus:       paymentStatus,
 	}
 	// For group events, give every attendee of the same slot the same
-	// group_session_id (deterministic from (event_type, start_utc)).
+	// group_session_id (deterministic from (event_type, start_utc)). Capacity
+	// is passed through so ReserveBookingTx can enforce it atomically — the
+	// pre-check above is a fast fail, the in-tx check is authoritative.
 	if et.EffectiveCapacity() > 1 {
 		draft.GroupSessionID = fmt.Sprintf("grp_%s_%d", et.ID, req.StartUTC.Unix())
+		draft.Capacity = et.EffectiveCapacity()
 	}
 	booking, err := p.repo.ReserveBookingTx(draft)
 	if err != nil {
 		if errors.Is(err, store.ErrSlotTaken) {
 			return Result{}, ErrSlotUnavailable
+		}
+		if errors.Is(err, store.ErrCapacityFull) {
+			return Result{}, ErrCapacityFull
 		}
 		return Result{}, fmt.Errorf("reserve: %w", err)
 	}

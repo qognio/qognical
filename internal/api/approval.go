@@ -1,6 +1,7 @@
 package api
 
 import (
+	"html"
 	"net/http"
 
 	"github.com/pocketbase/pocketbase/core"
@@ -8,15 +9,34 @@ import (
 	"github.com/qognio/qognical/internal/token"
 )
 
-// handleApprove + handleDecline accept GET or POST so the host can click
-// the link straight from the email (browser sends GET) or trigger via API.
+// Approve / decline are two-step: a GET (the email link, which mail-security
+// scanners, link-previews and prefetchers auto-fetch) renders a no-store
+// confirmation page ONLY; the irreversible state change happens exclusively on
+// POST from that page's button. This prevents a scanner from silently
+// approving/declining a booking (2026-07-16). The token is echoed into the
+// form and posted back in the body, never re-logged as a mutating GET.
 
 func (a *API) handleApprove(e *core.RequestEvent) error {
+	return a.handleApprovalAction(e, false)
+}
+
+func (a *API) handleDecline(e *core.RequestEvent) error {
+	return a.handleApprovalAction(e, true)
+}
+
+func (a *API) handleApprovalAction(e *core.RequestEvent, decline bool) error {
 	id := e.Request.PathValue("id")
 	tok := e.Request.URL.Query().Get("token")
 	if tok == "" {
 		tok = e.Request.Header.Get("X-Booking-Token")
 	}
+	if tok == "" && e.Request.Method == http.MethodPost {
+		tok = e.Request.FormValue("token") // confirmation-form POST
+	}
+	// Never let a proxy/browser cache a page that carries the token.
+	e.Response.Header().Set("Cache-Control", "no-store")
+	e.Response.Header().Set("Referrer-Policy", "no-referrer")
+
 	b, err := a.Repo.FindBookingByID(id)
 	if err != nil {
 		return writeErr(e, http.StatusNotFound, CodeNotFound, "booking not found", nil)
@@ -27,38 +47,45 @@ func (a *API) handleApprove(e *core.RequestEvent) error {
 	if _, _, err := a.Tokens.Verify(tok, b.ApprovalTokenHash); err != nil {
 		return writeErr(e, http.StatusUnauthorized, mapTokenErr(err), err.Error(), nil)
 	}
+
+	// GET (incl. mail-scanner prefetch) → confirmation page, NO state change.
+	if e.Request.Method == http.MethodGet {
+		verb, action := "Buchung bestätigen", "approve"
+		if decline {
+			verb, action = "Buchung ablehnen", "decline"
+		}
+		return e.HTML(http.StatusOK, confirmActionHTML(id, action, tok, verb))
+	}
+
+	// POST → perform the action.
+	if decline {
+		reason := e.Request.URL.Query().Get("reason")
+		if _, err := a.Pipeline.HandleDecline(id, reason); err != nil {
+			return internalErrLog(e, err, "HandleDecline")
+		}
+		return e.HTML(http.StatusOK, simpleHTML(
+			"Anfrage abgelehnt",
+			"Die Buchung wurde storniert. Der Invitee wurde benachrichtigt."))
+	}
 	if _, err := a.Pipeline.HandleApproval(id); err != nil {
 		return internalErrLog(e, err, "HandleApproval")
 	}
-	// Respond friendly for the browser flow.
 	return e.HTML(http.StatusOK, simpleHTML(
 		"Buchung bestätigt",
 		"Die Anfrage wurde angenommen. Der Invitee wurde benachrichtigt."))
 }
 
-func (a *API) handleDecline(e *core.RequestEvent) error {
-	id := e.Request.PathValue("id")
-	tok := e.Request.URL.Query().Get("token")
-	if tok == "" {
-		tok = e.Request.Header.Get("X-Booking-Token")
-	}
-	reason := e.Request.URL.Query().Get("reason")
-	b, err := a.Repo.FindBookingByID(id)
-	if err != nil {
-		return writeErr(e, http.StatusNotFound, CodeNotFound, "booking not found", nil)
-	}
-	if b.ApprovalTokenHash == "" {
-		return writeErr(e, http.StatusGone, CodeTokenAlreadyUsed, "approval already handled", nil)
-	}
-	if _, _, err := a.Tokens.Verify(tok, b.ApprovalTokenHash); err != nil {
-		return writeErr(e, http.StatusUnauthorized, mapTokenErr(err), err.Error(), nil)
-	}
-	if _, err := a.Pipeline.HandleDecline(id, reason); err != nil {
-		return internalErrLog(e, err, "HandleDecline")
-	}
-	return e.HTML(http.StatusOK, simpleHTML(
-		"Anfrage abgelehnt",
-		"Die Buchung wurde storniert. Der Invitee wurde benachrichtigt."))
+// confirmActionHTML renders the GET confirmation page: a button that POSTs the
+// token back to the same path. Token in a hidden field, page marked no-store.
+func confirmActionHTML(bookingID, action, tok, verb string) string {
+	post := "/api/public/v1/bookings/" + html.EscapeString(bookingID) + "/" + action
+	return simpleHTML(verb,
+		`Bitte bestätige die Aktion.</p>
+<form method="POST" action="`+post+`" style="margin-top:16px">
+  <input type="hidden" name="token" value="`+html.EscapeString(tok)+`">
+  <button type="submit" style="font:inherit;padding:10px 18px;border:0;border-radius:8px;background:#2563eb;color:#fff;cursor:pointer">`+
+			html.EscapeString(verb)+`</button>
+</form><p>`)
 }
 
 // suppress unused-import lint when token package is only used indirectly

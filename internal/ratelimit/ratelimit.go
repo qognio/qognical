@@ -18,12 +18,12 @@ import (
 
 // Limiter is safe for concurrent use by HTTP handlers.
 type Limiter struct {
-	rate     float64 // tokens added per second
-	burst    float64 // max bucket size
-	mu       sync.Mutex
-	buckets  map[string]*bucket
-	lastGC   time.Time
-	gcEvery  time.Duration
+	rate    float64 // tokens added per second
+	burst   float64 // max bucket size
+	mu      sync.Mutex
+	buckets map[string]*bucket
+	lastGC  time.Time
+	gcEvery time.Duration
 }
 
 type bucket struct {

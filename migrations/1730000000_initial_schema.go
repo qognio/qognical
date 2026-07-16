@@ -19,17 +19,17 @@ func init() {
 
 // collection names (stable; used in code, app.FindCollectionByNameOrId).
 const (
-	CollUsers              = "users"
-	CollEventTypes         = "event_types"
-	CollAvailability       = "availability"
-	CollDateOverrides      = "date_overrides"
-	CollBookings           = "bookings"
-	CollIntegrations       = "integrations"
-	CollServiceTokens      = "service_tokens"
-	CollNotificationsLog   = "notifications_log"
-	CollOutboundWebhooks   = "outbound_webhooks"
-	CollWebhookDeliveries  = "webhook_deliveries"
-	CollAuditLog           = "audit_log"
+	CollUsers             = "users"
+	CollEventTypes        = "event_types"
+	CollAvailability      = "availability"
+	CollDateOverrides     = "date_overrides"
+	CollBookings          = "bookings"
+	CollIntegrations      = "integrations"
+	CollServiceTokens     = "service_tokens"
+	CollNotificationsLog  = "notifications_log"
+	CollOutboundWebhooks  = "outbound_webhooks"
+	CollWebhookDeliveries = "webhook_deliveries"
+	CollAuditLog          = "audit_log"
 )
 
 func up1730000000(app core.App) error {

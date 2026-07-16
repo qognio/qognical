@@ -4,8 +4,8 @@
 //   - Round-Robin / Pooled Availability  → event_types.hosts[] + assignment_strategy
 //   - Gruppen-Events mit Kapazität       → event_types.capacity
 //   - Approval-Workflow                  → event_types.requires_approval +
-//                                          bookings.approval_token_hash +
-//                                          bookings.approved_at / approved_by
+//     bookings.approval_token_hash +
+//     bookings.approved_at / approved_by
 //   - Branding pro Event-Type            → brand_color, brand_logo_url, custom_css
 //   - i18n light                         → event_types.locale, users.default_locale
 //
@@ -79,8 +79,8 @@ func extendEventTypes(app core.App) error {
 		Name: "hosts", CollectionId: userId, MaxSelect: 50,
 	})
 	add(&core.SelectField{
-		Name: "assignment_strategy",
-		Values: []string{"single", "round_robin", "least_loaded", "collective"},
+		Name:      "assignment_strategy",
+		Values:    []string{"single", "round_robin", "least_loaded", "collective"},
 		MaxSelect: 1,
 	})
 	add(&core.NumberField{

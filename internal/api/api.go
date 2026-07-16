@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/pocketbase/pocketbase/apis"
 	"github.com/pocketbase/pocketbase/core"
 
 	"github.com/qognio/qognical/internal/crypto"
@@ -60,25 +61,37 @@ func (a *API) Register(se *core.ServeEvent) {
 	g.GET("/event-types/{host}/{slug}", a.handleGetEventType)
 	g.GET("/event-types/{host}/{slug}/slots", a.handleListSlots)
 	g.POST("/bookings", a.handleCreateBooking)
-	g.POST("/bookings/{id}/cancel", a.handleCancel)
-	g.POST("/bookings/{id}/reschedule", a.handleReschedule)
-	g.GET("/bookings/{id}", a.handleGetBooking)
-	// v1.1 host approval — host clicks link from email (GET) or API does POST.
-	g.GET("/bookings/{id}/approve", a.handleApprove)
-	g.POST("/bookings/{id}/approve", a.handleApprove)
-	g.GET("/bookings/{id}/decline", a.handleDecline)
-	g.POST("/bookings/{id}/decline", a.handleDecline)
+	// Token-bearing routes: keep the ?token=... out of PocketBase's activity
+	// log so a bearer-capable booking token can't leak via the log DB
+	// (2026-07-16). The token is also transported/echoed with no-store.
+	g.POST("/bookings/{id}/cancel", a.handleCancel).Bind(apis.SkipSuccessActivityLog())
+	g.POST("/bookings/{id}/reschedule", a.handleReschedule).Bind(apis.SkipSuccessActivityLog())
+	g.GET("/bookings/{id}", a.handleGetBooking).Bind(apis.SkipSuccessActivityLog())
+	// v1.1 host approval — GET renders a confirmation page, POST mutates.
+	g.GET("/bookings/{id}/approve", a.handleApprove).Bind(apis.SkipSuccessActivityLog())
+	g.POST("/bookings/{id}/approve", a.handleApprove).Bind(apis.SkipSuccessActivityLog())
+	g.GET("/bookings/{id}/decline", a.handleDecline).Bind(apis.SkipSuccessActivityLog())
+	g.POST("/bookings/{id}/decline", a.handleDecline).Bind(apis.SkipSuccessActivityLog())
 	g.OPTIONS("/{path...}", func(e *core.RequestEvent) error { return e.NoContent(http.StatusNoContent) })
 }
 
 // ----- middleware -----
 
 // rateLimitMiddleware enforces per-IP rate limits per Doc 06. Different
-// buckets for reads (lenient) and mutations (strict). Service-token
-// requests bypass — they have their own quotas (Phase-5 future work).
+// buckets for reads (lenient) and mutations (strict). A VALID service token
+// bypasses — it has its own quota.
+//
+// SECURITY (2026-07-16): the bypass previously fired for ANY non-empty
+// Authorization header, so `Authorization: x` lifted the IP quota entirely
+// (unbounded scraping of expensive slot/directory reads, and the booking POST
+// body was decoded before the limiter). We now bypass only after the token
+// actually verifies as a service token; anything else is rate-limited normally.
 func (a *API) rateLimitMiddleware(e *core.RequestEvent) error {
-	if e.Request.Header.Get("Authorization") != "" {
-		return e.Next()
+	if hdr := e.Request.Header.Get("Authorization"); hdr != "" {
+		if _, err := svctoken.Verify(a.Repo, hdr); err == nil {
+			return e.Next() // genuine service token → its own quota applies
+		}
+		// invalid/garbage Authorization → fall through to normal IP limiting
 	}
 	method := e.Request.Method
 	var limiter RateLimiter
@@ -354,7 +367,13 @@ type bookingCreatedResp struct {
 	CheckoutURL string `json:"checkout_url,omitempty"`
 }
 
+// maxBookingBody caps the anonymous booking JSON (incl. intake_data) so a
+// large body can't exhaust memory before validation (2026-07-16). 256 KiB is
+// generous for a booking + intake payload.
+const maxBookingBody = 256 << 10
+
 func (a *API) handleCreateBooking(e *core.RequestEvent) error {
+	e.Request.Body = http.MaxBytesReader(e.Response, e.Request.Body, maxBookingBody)
 	var req createBookingReq
 	if err := e.BindBody(&req); err != nil {
 		return writeErr(e, http.StatusBadRequest, CodeInvalidRequest, "malformed json", nil)

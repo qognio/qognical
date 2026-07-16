@@ -173,15 +173,15 @@ func (p *Provider) createSubscription(ctx context.Context, in adapters.CheckoutR
 	}
 	headers["Prefer"] = "return=representation"
 	body := map[string]any{
-		"plan_id":     in.StripePriceID, // PayPal plan id, e.g. P-1AB23...
-		"custom_id":   in.BookingID,     // so the webhook can find the booking
-		"subscriber":  map[string]any{"email_address": in.InviteeMail},
+		"plan_id":    in.StripePriceID, // PayPal plan id, e.g. P-1AB23...
+		"custom_id":  in.BookingID,     // so the webhook can find the booking
+		"subscriber": map[string]any{"email_address": in.InviteeMail},
 		"application_context": map[string]any{
-			"return_url":           in.SuccessURL,
-			"cancel_url":           in.CancelURL,
-			"user_action":          "SUBSCRIBE_NOW",
-			"payment_method":       map[string]any{"payer_selected": "PAYPAL"},
-			"shipping_preference":  "NO_SHIPPING",
+			"return_url":          in.SuccessURL,
+			"cancel_url":          in.CancelURL,
+			"user_action":         "SUBSCRIBE_NOW",
+			"payment_method":      map[string]any{"payer_selected": "PAYPAL"},
+			"shipping_preference": "NO_SHIPPING",
 		},
 	}
 	var resp struct {
@@ -301,7 +301,13 @@ func (p *Provider) VerifyWebhook(rawBody []byte, headers adapters.WebhookHeaders
 	}
 	resource, _ := event["resource"].(map[string]any)
 	switch event["event_type"] {
-	case "CHECKOUT.ORDER.APPROVED", "PAYMENT.CAPTURE.COMPLETED",
+	// CHECKOUT.ORDER.APPROVED is deliberately NOT a success: approval only
+	// means the buyer authorized the order, no money moved yet. Treating it as
+	// paid confirmed the booking (meeting + calendar + mails) before any
+	// capture (2026-07-16). A real capture must be driven server-side
+	// (CaptureOrder) and only PAYMENT.CAPTURE.COMPLETED counts. APPROVED falls
+	// through here → ignored (booking stays pending_payment).
+	case "PAYMENT.CAPTURE.COMPLETED",
 		"BILLING.SUBSCRIPTION.ACTIVATED":
 		out.Type = adapters.EventPaymentSucceeded
 		if resource != nil {

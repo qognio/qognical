@@ -29,10 +29,10 @@ const Name = "nextcloud"
 
 // Credentials JSON shape (encrypted at rest).
 type Credentials struct {
-	BaseURL     string `json:"base_url"`     // https://cloud.example.com
+	BaseURL     string `json:"base_url"` // https://cloud.example.com
 	Username    string `json:"username"`
 	AppPassword string `json:"app_password"`
-	Calendar    string `json:"calendar"`     // e.g. "personal"
+	Calendar    string `json:"calendar"` // e.g. "personal"
 }
 
 func Factory(credsRaw, _ json.RawMessage) (adapters.CalendarProvider, error) {

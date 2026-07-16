@@ -34,8 +34,8 @@ func TestHashIsDeterministic(t *testing.T) {
 
 func TestResolvedScopeAndBookGating(t *testing.T) {
 	r := &Resolved{Token: ServiceToken{
-		Scopes:            []Scope{ScopeBookingsCreate, ScopeBookingsRead},
-		HostBinding:       "host_42",
+		Scopes:             []Scope{ScopeBookingsCreate, ScopeBookingsRead},
+		HostBinding:        "host_42",
 		EventTypeAllowlist: []string{"et_1", "et_2"},
 	}}
 	if !r.HasScope(ScopeBookingsCreate) {

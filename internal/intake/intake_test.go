@@ -135,8 +135,8 @@ func TestDateFormat(t *testing.T) {
 func TestSchemaShapeErrors(t *testing.T) {
 	cases := []string{
 		`{"fields":[{"key":"x","type":"unknown"}]}`,
-		`{"fields":[{"key":"X","type":"text"}]}`,            // uppercase key
-		`{"fields":[{"key":"x","type":"select"}]}`,          // missing options
+		`{"fields":[{"key":"X","type":"text"}]}`,   // uppercase key
+		`{"fields":[{"key":"x","type":"select"}]}`, // missing options
 		`{"fields":[{"key":"x","type":"text","pattern":"["}]}`,
 	}
 	for _, c := range cases {

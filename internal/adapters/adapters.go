@@ -66,9 +66,9 @@ type CalendarEvent struct {
 
 // CreatedEvent carries IDs the pipeline persists in bookings.*.
 type CreatedEvent struct {
-	ExternalID    string
-	MeetingURL    string // populated when CreateOnlineMeeting was requested
-	MeetingID     string // optional, provider-specific
+	ExternalID string
+	MeetingURL string // populated when CreateOnlineMeeting was requested
+	MeetingID  string // optional, provider-specific
 }
 
 // ----- Meeting -----
@@ -88,14 +88,14 @@ type MeetingProvider interface {
 }
 
 type MeetingRequest struct {
-	BookingID     string
-	Summary       string
-	StartUTC      time.Time
-	EndUTC        time.Time
-	HostMail      string
-	HostName      string
-	InviteeMail   string
-	InviteeName   string
+	BookingID   string
+	Summary     string
+	StartUTC    time.Time
+	EndUTC      time.Time
+	HostMail    string
+	HostName    string
+	InviteeMail string
+	InviteeName string
 }
 
 type MeetingResult struct {
@@ -211,12 +211,12 @@ const (
 
 // WebhookEvent is what VerifyWebhook returns after authenticating the body.
 type WebhookEvent struct {
-	Type          WebhookEventType
-	EventID       string // provider's event id; used for idempotency
-	ExternalID    string // payment / checkout-session id ↔ bookings.payment_external_id
-	BookingID     string // populated when we passed it as client_reference_id
-	AmountCents   int
-	Currency      string
-	OccurredAt    time.Time
-	Raw           map[string]any // full decoded payload for debugging
+	Type        WebhookEventType
+	EventID     string // provider's event id; used for idempotency
+	ExternalID  string // payment / checkout-session id ↔ bookings.payment_external_id
+	BookingID   string // populated when we passed it as client_reference_id
+	AmountCents int
+	Currency    string
+	OccurredAt  time.Time
+	Raw         map[string]any // full decoded payload for debugging
 }

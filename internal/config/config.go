@@ -215,5 +215,14 @@ func (c *Config) Validate() error {
 	if !strings.HasPrefix(c.BaseURL, "https://") && !strings.HasPrefix(c.BaseURL, "http://") {
 		return errors.New("QOGNICAL_BASE_URL must include scheme (http:// or https://)")
 	}
+	// Payment providers must be fail-closed: a signing secret is mandatory
+	// whenever the provider is enabled, else webhooks are forgeable
+	// (2026-07-16). Refuse to start on a misconfiguration.
+	if c.Providers.StripeSecretKey != "" && c.Providers.StripeWebhookSecret == "" {
+		return errors.New("QOGNICAL_STRIPE_WEBHOOK_SECRET required when Stripe is enabled")
+	}
+	if c.Providers.PayPalClientID != "" && c.Providers.PayPalWebhookID == "" {
+		return errors.New("QOGNICAL_PAYPAL_WEBHOOK_ID required when PayPal is enabled")
+	}
 	return nil
 }

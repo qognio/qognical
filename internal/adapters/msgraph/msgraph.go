@@ -74,8 +74,8 @@ type Provider struct {
 	creds Credentials
 	cfg   Config
 
-	mu      sync.Mutex
-	token   string
+	mu       sync.Mutex
+	token    string
 	tokenExp time.Time
 }
 
@@ -129,9 +129,9 @@ func (p *Provider) FreeBusy(ctx context.Context, from, to time.Time) ([]timeutil
 		return nil, err
 	}
 	body := map[string]any{
-		"schedules":            []string{p.creds.UserID},
-		"startTime":            graphTimeRange(from),
-		"endTime":              graphTimeRange(to),
+		"schedules":                []string{p.creds.UserID},
+		"startTime":                graphTimeRange(from),
+		"endTime":                  graphTimeRange(to),
 		"availabilityViewInterval": 15,
 	}
 	type item struct {
@@ -175,10 +175,10 @@ func (p *Provider) CreateEvent(ctx context.Context, in adapters.CalendarEvent) (
 		return adapters.CreatedEvent{}, err
 	}
 	body := map[string]any{
-		"subject": in.Summary,
-		"body":    map[string]any{"contentType": "HTML", "content": in.Description},
-		"start":   map[string]any{"dateTime": in.StartUTC.Format("2006-01-02T15:04:05"), "timeZone": "UTC"},
-		"end":     map[string]any{"dateTime": in.EndUTC.Format("2006-01-02T15:04:05"), "timeZone": "UTC"},
+		"subject":  in.Summary,
+		"body":     map[string]any{"contentType": "HTML", "content": in.Description},
+		"start":    map[string]any{"dateTime": in.StartUTC.Format("2006-01-02T15:04:05"), "timeZone": "UTC"},
+		"end":      map[string]any{"dateTime": in.EndUTC.Format("2006-01-02T15:04:05"), "timeZone": "UTC"},
 		"location": map[string]any{"displayName": in.Location},
 		"attendees": []map[string]any{
 			{

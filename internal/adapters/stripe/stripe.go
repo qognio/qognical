@@ -50,6 +50,13 @@ func Factory(credsRaw, confRaw json.RawMessage) (adapters.PaymentProvider, error
 	if c.SecretKey == "" {
 		return nil, errors.New("stripe: secret_key required")
 	}
+	// Fail closed: without a webhook secret VerifyWebhook would HMAC with an
+	// empty key, so ANYONE could forge a signed `checkout.session.completed`
+	// and get a booking marked paid without paying (2026-07-16). Refuse to
+	// start Stripe at all rather than accept unauthenticated webhooks.
+	if c.WebhookSecret == "" {
+		return nil, errors.New("stripe: webhook_secret required (refusing to accept unsigned webhooks)")
+	}
 	cfg := Config{APIBase: "https://api.stripe.com"}
 	if len(confRaw) > 0 {
 		_ = json.Unmarshal(confRaw, &cfg)
@@ -246,10 +253,12 @@ func (p *Provider) VerifyWebhook(rawBody []byte, headers adapters.WebhookHeaders
 		return adapters.WebhookEvent{}, errors.New("stripe: signature mismatch")
 	}
 	var ev struct {
-		ID      string         `json:"id"`
-		Type    string         `json:"type"`
-		Created int64          `json:"created"`
-		Data    struct{ Object map[string]any `json:"object"` } `json:"data"`
+		ID      string `json:"id"`
+		Type    string `json:"type"`
+		Created int64  `json:"created"`
+		Data    struct {
+			Object map[string]any `json:"object"`
+		} `json:"data"`
 	}
 	if err := json.Unmarshal(rawBody, &ev); err != nil {
 		return adapters.WebhookEvent{}, err

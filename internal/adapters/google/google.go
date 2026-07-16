@@ -226,7 +226,7 @@ func (p *Provider) CreateEvent(ctx context.Context, in adapters.CalendarEvent) (
 	if in.CreateOnlineMeeting && !p.creds.isServiceAccount() {
 		body["conferenceData"] = map[string]any{
 			"createRequest": map[string]any{
-				"requestId": fmt.Sprintf("qog-%d", in.StartUTC.UnixNano()),
+				"requestId":             fmt.Sprintf("qog-%d", in.StartUTC.UnixNano()),
 				"conferenceSolutionKey": map[string]any{"type": "hangoutsMeet"},
 			},
 		}

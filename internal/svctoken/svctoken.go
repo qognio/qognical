@@ -25,12 +25,12 @@ import (
 type Scope string
 
 const (
-	ScopeBookingsCreate    Scope = "bookings:create"
-	ScopeBookingsRead      Scope = "bookings:read"
-	ScopeBookingsCancel    Scope = "bookings:cancel"
+	ScopeBookingsCreate     Scope = "bookings:create"
+	ScopeBookingsRead       Scope = "bookings:read"
+	ScopeBookingsCancel     Scope = "bookings:cancel"
 	ScopeBookingsReschedule Scope = "bookings:reschedule"
-	ScopeAvailabilityRead  Scope = "availability:read"
-	ScopeEventTypesRead    Scope = "event_types:read"
+	ScopeAvailabilityRead   Scope = "availability:read"
+	ScopeEventTypesRead     Scope = "event_types:read"
 )
 
 // Prefix is the user-visible token prefix; helps Stripe-style identification
@@ -58,13 +58,13 @@ func Hash(raw string) string {
 
 // ServiceToken is the resolved store representation.
 type ServiceToken struct {
-	ID                string
-	Name              string
-	Scopes            []Scope
-	HostBinding       string   // empty = any host
+	ID                 string
+	Name               string
+	Scopes             []Scope
+	HostBinding        string   // empty = any host
 	EventTypeAllowlist []string // nil/empty = any event type
-	ExpiresAt         time.Time
-	RevokedAt         time.Time
+	ExpiresAt          time.Time
+	RevokedAt          time.Time
 }
 
 // Resolved indicates which token a request maps to plus what it can do.
@@ -101,10 +101,10 @@ func (r *Resolved) CanBookFor(hostID, eventTypeID string) bool {
 
 // Errors returned by Verify.
 var (
-	ErrTokenMissing  = errors.New("service token missing")
-	ErrTokenInvalid  = errors.New("service token invalid")
-	ErrTokenExpired  = errors.New("service token expired")
-	ErrTokenRevoked  = errors.New("service token revoked")
+	ErrTokenMissing = errors.New("service token missing")
+	ErrTokenInvalid = errors.New("service token invalid")
+	ErrTokenExpired = errors.New("service token expired")
+	ErrTokenRevoked = errors.New("service token revoked")
 )
 
 // Verify reads the bearer token from `Authorization`, looks up the hash, and
@@ -141,9 +141,9 @@ func Verify(repo *store.Repo, header string) (*Resolved, error) {
 	return &Resolved{
 		Token: ServiceToken{
 			ID: st.ID, Name: st.Name, Scopes: scopes,
-			HostBinding: st.HostBinding,
+			HostBinding:        st.HostBinding,
 			EventTypeAllowlist: st.EventTypeAllowlist,
-			ExpiresAt: st.ExpiresAt, RevokedAt: st.RevokedAt,
+			ExpiresAt:          st.ExpiresAt, RevokedAt: st.RevokedAt,
 		},
 		RawValue: raw,
 	}, nil

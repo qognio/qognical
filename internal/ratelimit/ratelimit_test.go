@@ -24,9 +24,15 @@ func TestAllowUnderBurst(t *testing.T) {
 
 func TestPerKeyIsolation(t *testing.T) {
 	l, _ := New("1/sec")
-	if ok, _ := l.Allow("a"); !ok { t.Fatal("a #1") }
-	if ok, _ := l.Allow("b"); !ok { t.Fatal("b #1") }
-	if ok, _ := l.Allow("a"); ok { t.Fatal("a #2 should be blocked") }
+	if ok, _ := l.Allow("a"); !ok {
+		t.Fatal("a #1")
+	}
+	if ok, _ := l.Allow("b"); !ok {
+		t.Fatal("b #1")
+	}
+	if ok, _ := l.Allow("a"); ok {
+		t.Fatal("a #2 should be blocked")
+	}
 }
 
 func TestNilLimiterAllowsAll(t *testing.T) {
@@ -40,7 +46,9 @@ func TestNilLimiterAllowsAll(t *testing.T) {
 
 func TestEmptySpecAllowsAll(t *testing.T) {
 	l, err := New("")
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	for i := 0; i < 100; i++ {
 		if ok, _ := l.Allow("x"); !ok {
 			t.Fatal("empty spec must allow")
