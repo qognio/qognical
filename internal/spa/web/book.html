@@ -713,7 +713,13 @@
      URL parsing + utilities
      ============================================================ */
   const path = location.pathname.split('/').filter(Boolean);
-  const [section, host, slug] = path;
+  // location.pathname keeps segments percent-encoded, so an email host like
+  // meeting%40xr-essential.com arrives still encoded. Decode BEFORE the API
+  // call re-encodes it, else `@` → %40 → %2540 (double-encoded) and the host
+  // lookup 404s → "host not found" for every email-URL booking page (fix
+  // 2026-07-17). decodeURIComponent is a no-op on already-clean slugs.
+  const decodeSeg = (s) => { try { return decodeURIComponent(s); } catch { return s; } };
+  const [section, host, slug] = path.map(decodeSeg);
   if (section !== 'book' || !host || !slug) {
     document.getElementById('app').innerHTML =
       '<div class="center-msg">Ungültige Buchungs-URL.</div>';
