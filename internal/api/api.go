@@ -303,9 +303,17 @@ func (a *API) handleListSlots(e *core.RequestEvent) error {
 	// existing single-host code path is correct when pool size = 1.
 	hostIDs := et.AllHosts()
 	var busy []timeutil.Interval
-	if len(hostIDs) == 1 {
+	switch {
+	case et.EffectiveCapacity() > 1:
+		// Group event: the host's own attendees must NOT hide the slot — that's
+		// what capacity is for. Subtracting busy here removed the slot after the
+		// FIRST booking, so a capacity-100 webinar behaved like capacity 1
+		// (found 2026-07-17 on NEXUS LIVE). The CountActiveAtSlot >= cap check
+		// below is the sole, correct gate for group slots.
+		busy = nil
+	case len(hostIDs) == 1:
 		busy, err = a.Repo.ActiveBusyForHost(host.ID, from, to.Add(24*time.Hour))
-	} else {
+	default:
 		busy, err = a.Repo.ActiveBusyAllHostsIntersection(hostIDs, from, to.Add(24*time.Hour))
 	}
 	if err != nil {
