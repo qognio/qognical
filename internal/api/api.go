@@ -305,12 +305,13 @@ func (a *API) handleListSlots(e *core.RequestEvent) error {
 	var busy []timeutil.Interval
 	switch {
 	case et.EffectiveCapacity() > 1:
-		// Group event: the host's own attendees must NOT hide the slot — that's
-		// what capacity is for. Subtracting busy here removed the slot after the
-		// FIRST booking, so a capacity-100 webinar behaved like capacity 1
-		// (found 2026-07-17 on NEXUS LIVE). The CountActiveAtSlot >= cap check
-		// below is the sole, correct gate for group slots.
-		busy = nil
+		// Group event: the event's OWN attendees must not hide the slot (that's
+		// what capacity is for — subtracting them made a cap-100 webinar behave
+		// like cap 1, found 2026-07-17). But conflicts from the host's OTHER
+		// event-types must still block it, so exclude only this event-type from
+		// busy and let CountActiveAtSlot >= cap gate the group itself
+		// (2026-07-20, refines the 2026-07-17 fix which dropped busy entirely).
+		busy, err = a.Repo.ActiveBusyForHostExcludingEventType(host.ID, et.ID, from, to.Add(24*time.Hour))
 	case len(hostIDs) == 1:
 		busy, err = a.Repo.ActiveBusyForHost(host.ID, from, to.Add(24*time.Hour))
 	default:
@@ -551,6 +552,14 @@ func (a *API) handleGetBooking(e *core.RequestEvent) error {
 // (including garbage) could cancel/reschedule any known booking id. The bool
 // contract makes the outcome explicit and impossible to ignore accidentally.
 func (a *API) verifyTokenForBooking(e *core.RequestEvent, bookingID string, action token.Action) bool {
+	// Token-authorized responses (incl. handleGetBooking's invitee PII) must
+	// never be cached under the token-less URL, and the token must not leak via
+	// Referer (2026-07-20 — the routing comment already promised this but only
+	// approve/decline set it). Set before any read/branch so every code path,
+	// including the 4xx ones, carries the headers.
+	e.Response.Header().Set("Cache-Control", "no-store, private")
+	e.Response.Header().Set("Referrer-Policy", "no-referrer")
+
 	tok := e.Request.Header.Get("X-Booking-Token")
 	if tok == "" {
 		tok = e.Request.URL.Query().Get("token")

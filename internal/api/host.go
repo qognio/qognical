@@ -76,11 +76,23 @@ func (a *API) teamBookings(e *core.RequestEvent) error {
 		filter += " && start_utc < {:to}"
 		params["to"] = to
 	}
-	// Enforce the token's host binding — a host-scoped token must not read
-	// other hosts' bookings.
-	if st, ok := e.Get(svcTokenCtxKey).(*svctoken.Resolved); ok && st.Token.HostBinding != "" {
-		filter += " && host = {:hb}"
-		params["hb"] = st.Token.HostBinding
+	// Enforce the token's scope — a host-scoped token must not read other
+	// hosts' bookings, and an event-type-allowlisted token must not read
+	// bookings of other event-types (2026-07-20: allowlist was ignored).
+	if st, ok := e.Get(svcTokenCtxKey).(*svctoken.Resolved); ok {
+		if st.Token.HostBinding != "" {
+			filter += " && host = {:hb}"
+			params["hb"] = st.Token.HostBinding
+		}
+		if len(st.Token.EventTypeAllowlist) > 0 {
+			placeholders := make([]string, len(st.Token.EventTypeAllowlist))
+			for i, id := range st.Token.EventTypeAllowlist {
+				key := fmt.Sprintf("et%d", i)
+				placeholders[i] = "{:" + key + "}"
+				params[key] = id
+			}
+			filter += " && event_type IN (" + strings.Join(placeholders, ",") + ")"
+		}
 	}
 	recs, err := e.App.FindRecordsByFilter(migrations.CollBookings, filter, "start_utc", 500, 0, params)
 	if err != nil {
@@ -215,6 +227,7 @@ func (a *API) hostMe(e *core.RequestEvent) error {
 		"id":             u.Id,
 		"email":          u.Email(),
 		"name":           u.GetString("name"),
+		"slug":           u.GetString("slug"), // #16: dashboard builds public URLs from this (falls back to email)
 		"timezone":       u.GetString("timezone"),
 		"default_locale": u.GetString("default_locale"),
 		"role":           u.GetString("role"),
@@ -645,10 +658,15 @@ func (a *API) hostListDateOverrides(e *core.RequestEvent) error {
 	}
 	out := make([]map[string]any, 0, len(recs))
 	for _, r := range recs {
+		// Translate the schema vocabulary back to the API/dashboard one.
+		apiType := "closed"
+		if r.GetString("type") == "custom_hours" {
+			apiType = "open"
+		}
 		out = append(out, map[string]any{
 			"id":    r.Id,
 			"date":  r.GetString("date"),
-			"type":  r.GetString("type"),
+			"type":  apiType,
 			"start": r.GetString("start"),
 			"end":   r.GetString("end"),
 		})
@@ -673,6 +691,13 @@ func (a *API) hostCreateDateOverride(e *core.RequestEvent) error {
 	if in.Date == "" || (in.Type != "closed" && in.Type != "open") {
 		return writeErr(e, http.StatusBadRequest, CodeInvalidRequest, "date required, type=closed|open", nil)
 	}
+	// The API/dashboard vocabulary is closed|open, but the collection's SelectField
+	// only accepts unavailable|custom_hours — so every override Save() was rejected
+	// by schema validation (2026-07-20). Translate at the boundary.
+	schemaType := "unavailable"
+	if in.Type == "open" {
+		schemaType = "custom_hours"
+	}
 	c, err := e.App.FindCollectionByNameOrId(migrations.CollDateOverrides)
 	if err != nil {
 		return writeErr(e, http.StatusInternalServerError, CodeInternalError, err.Error(), nil)
@@ -680,7 +705,7 @@ func (a *API) hostCreateDateOverride(e *core.RequestEvent) error {
 	r := core.NewRecord(c)
 	r.Set("owner", uid)
 	r.Set("date", in.Date)
-	r.Set("type", in.Type)
+	r.Set("type", schemaType)
 	if in.Type == "open" {
 		r.Set("start", in.Start)
 		r.Set("end", in.End)

@@ -367,15 +367,44 @@ func recordToBooking(r *core.Record) Booking {
 // dbx.HashExp doesn't reliably match DateTime equality, so we pass the
 // timestamp as an explicit binding.
 func (r *Repo) CountActiveAtSlot(eventTypeID string, start, end time.Time) (int, error) {
-	recs, err := r.app.FindAllRecords(migrations.CollBookings,
-		dbx.HashExp{"event_type": eventTypeID},
-		dbx.NewExp("start_utc = {:s}", dbx.Params{"s": mustDateTime(start)}),
-		dbx.NewExp("status IN ("+state.ActiveStatusSQLList()+")"),
-	)
+	// COUNT(*), not FindAllRecords: a group-slot listing calls this once per
+	// candidate slot, so materialising every row would balloon into thousands
+	// of loaded records per anonymous request (2026-07-20).
+	var n int
+	err := r.app.DB().
+		Select("COUNT(*)").
+		From(migrations.CollBookings).
+		Where(dbx.HashExp{"event_type": eventTypeID, "start_utc": mustDateTime(start)}).
+		AndWhere(dbx.NewExp("status IN (" + state.ActiveStatusSQLList() + ")")).
+		Row(&n)
 	if err != nil {
 		return 0, err
 	}
-	return len(recs), nil
+	return n, nil
+}
+
+// ActiveBusyForHostExcludingEventType is ActiveBusyForHost minus the bookings
+// of one event-type. Group-slot listing uses it so the event's OWN attendees
+// don't hide the slot (capacity gates those) while conflicts from the host's
+// OTHER event-types still block it (2026-07-20).
+func (r *Repo) ActiveBusyForHostExcludingEventType(hostID, excludeEventTypeID string, from, to time.Time) ([]timeutil.Interval, error) {
+	recs, err := r.app.FindAllRecords(migrations.CollBookings,
+		dbx.HashExp{"host": hostID},
+		dbx.NewExp("event_type != {:et}", dbx.Params{"et": excludeEventTypeID}),
+		dbx.NewExp("status IN ("+state.ActiveStatusSQLList()+")"),
+		dbx.NewExp("end_utc > {:from} AND start_utc < {:to}", dbx.Params{"from": from, "to": to}),
+	)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]timeutil.Interval, 0, len(recs))
+	for _, rec := range recs {
+		out = append(out, timeutil.Interval{
+			Start: rec.GetDateTime("start_utc").Time(),
+			End:   rec.GetDateTime("end_utc").Time(),
+		})
+	}
+	return out, nil
 }
 
 // HostLoadInWindow returns a map of host_id → count of active bookings in the

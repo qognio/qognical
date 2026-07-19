@@ -109,6 +109,16 @@ func (e Errors) Error() string {
 
 // Validate checks the user-submitted intake against the schema. Returns a
 // non-nil Errors map (len > 0) if any field failed.
+// NotesKey is the always-allowed free-text note the booking UI offers even
+// when the intake schema declares no such field. The server accepts it here
+// (length-capped) instead of rejecting it as "unknown field" — otherwise every
+// booking with a filled "Notizen" box failed for schema-less event-types like
+// NEXUS LIVE (2026-07-20).
+const NotesKey = "notes"
+
+// maxNotesLen bounds the built-in notes field.
+const maxNotesLen = 2000
+
 func (s *Schema) Validate(data map[string]any) error {
 	errs := Errors{}
 	for _, f := range s.Fields {
@@ -119,19 +129,37 @@ func (s *Schema) Validate(data map[string]any) error {
 			}
 			continue
 		}
+		// A required checkbox must be explicitly true. isZero() is false for a
+		// bool `false`, so without this a required consent/AGB box could be
+		// submitted as false and still pass (2026-07-20).
+		if f.Required && f.Type == TypeCheckbox && raw != true {
+			errs[f.Key] = "required"
+			continue
+		}
 		if err := f.validateValue(raw); err != nil {
 			errs[f.Key] = err.Error()
 		}
 	}
-	// Reject unknown fields to discourage payload smuggling.
+	// Reject unknown fields to discourage payload smuggling — except the
+	// built-in `notes` key (bounded) which the UI always offers when the
+	// schema itself declares no `notes` field.
 	known := map[string]bool{}
 	for _, f := range s.Fields {
 		known[f.Key] = true
 	}
-	for k := range data {
-		if !known[k] {
-			errs[k] = "unknown field"
+	for k, v := range data {
+		if known[k] {
+			continue // validated in the field loop above
 		}
+		if k == NotesKey {
+			if str, ok := v.(string); !ok {
+				errs[k] = "must be text"
+			} else if len(str) > maxNotesLen {
+				errs[k] = "too long"
+			}
+			continue
+		}
+		errs[k] = "unknown field"
 	}
 	if len(errs) == 0 {
 		return nil

@@ -269,7 +269,25 @@ func (p *Provider) VerifyWebhook(rawBody []byte, headers adapters.WebhookHeaders
 		Raw:        ev.Data.Object,
 	}
 	switch ev.Type {
-	case "checkout.session.completed", "checkout.session.async_payment_succeeded", "invoice.paid":
+	case "checkout.session.completed":
+		// completed fires for delayed methods with payment_status=unpaid too —
+		// confirming then would grant the meeting before money moved. Only treat
+		// it as paid when actually paid; otherwise wait for the async_* event
+		// (2026-07-20).
+		ps, _ := ev.Data.Object["payment_status"].(string)
+		if ps != "paid" && ps != "no_payment_required" {
+			out.Type = "" // ignored; async_payment_succeeded will confirm
+			out.ExternalID, _ = ev.Data.Object["id"].(string)
+			break
+		}
+		out.Type = adapters.EventPaymentSucceeded
+		out.ExternalID, _ = ev.Data.Object["id"].(string)
+		out.BookingID, _ = ev.Data.Object["client_reference_id"].(string)
+		if amt, ok := ev.Data.Object["amount_total"].(float64); ok {
+			out.AmountCents = int(amt)
+		}
+		out.Currency, _ = ev.Data.Object["currency"].(string)
+	case "checkout.session.async_payment_succeeded", "invoice.paid":
 		out.Type = adapters.EventPaymentSucceeded
 		out.ExternalID, _ = ev.Data.Object["id"].(string)
 		out.BookingID, _ = ev.Data.Object["client_reference_id"].(string)

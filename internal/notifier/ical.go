@@ -77,10 +77,15 @@ func fmtUTC(t time.Time) string {
 }
 
 // escape applies RFC 5545 text escaping. Order matters: backslash first.
+// Newlines are normalised (CRLF/CR/LF → \n) so a host-controlled title/name
+// with a raw CR can't start a new property line in tolerant parsers
+// (2026-07-20: \r was passed through unescaped).
 func escape(s string) string {
 	s = strings.ReplaceAll(s, `\`, `\\`)
 	s = strings.ReplaceAll(s, ";", `\;`)
 	s = strings.ReplaceAll(s, ",", `\,`)
+	s = strings.ReplaceAll(s, "\r\n", `\n`)
+	s = strings.ReplaceAll(s, "\r", `\n`)
 	s = strings.ReplaceAll(s, "\n", `\n`)
 	return s
 }

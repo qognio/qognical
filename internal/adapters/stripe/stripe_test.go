@@ -79,22 +79,40 @@ func TestCheckoutHoldUsesManualCapture(t *testing.T) {
 	}
 }
 
-func TestWebhookValidSignature(t *testing.T) {
-	p := newProvider(t, httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {})))
-	body := []byte(`{"id":"evt_1","type":"checkout.session.completed","created":` +
-		fmt.Sprint(time.Now().Unix()) + `,"data":{"object":{"id":"cs_x","client_reference_id":"bk1","amount_total":1234,"currency":"eur"}}}`)
+func signedEvent(t *testing.T, p *Provider, body []byte) (adapters.WebhookEvent, error) {
+	t.Helper()
 	ts := fmt.Sprint(time.Now().Unix())
 	mac := hmac.New(sha256.New, []byte("whsec_test"))
 	mac.Write([]byte(ts + "." + string(body)))
 	sig := hex.EncodeToString(mac.Sum(nil))
-	ev, err := p.VerifyWebhook(body, adapters.WebhookHeaders{
-		"Stripe-Signature": "t=" + ts + ",v1=" + sig,
-	})
+	return p.VerifyWebhook(body, adapters.WebhookHeaders{"Stripe-Signature": "t=" + ts + ",v1=" + sig})
+}
+
+func TestWebhookValidSignature(t *testing.T) {
+	p := newProvider(t, httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {})))
+	body := []byte(`{"id":"evt_1","type":"checkout.session.completed","created":` +
+		fmt.Sprint(time.Now().Unix()) + `,"data":{"object":{"id":"cs_x","payment_status":"paid","client_reference_id":"bk1","amount_total":1234,"currency":"eur"}}}`)
+	ev, err := signedEvent(t, p, body)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if ev.Type != adapters.EventPaymentSucceeded || ev.BookingID != "bk1" || ev.AmountCents != 1234 {
 		t.Errorf("got %+v", ev)
+	}
+}
+
+// completed with payment_status=unpaid (delayed method) must NOT confirm —
+// the async_payment_succeeded event does that later (#2026-07-20).
+func TestWebhookCompletedUnpaidIgnored(t *testing.T) {
+	p := newProvider(t, httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {})))
+	body := []byte(`{"id":"evt_2","type":"checkout.session.completed","created":` +
+		fmt.Sprint(time.Now().Unix()) + `,"data":{"object":{"id":"cs_y","payment_status":"unpaid","client_reference_id":"bk2","amount_total":1234,"currency":"eur"}}}`)
+	ev, err := signedEvent(t, p, body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ev.Type == adapters.EventPaymentSucceeded {
+		t.Errorf("unpaid completed session was treated as paid: %+v", ev)
 	}
 }
 
