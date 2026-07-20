@@ -183,8 +183,9 @@ type eventTypeListItem struct {
 }
 
 // handleListEventTypes returns every active event-type with its host's
-// public identity. Used by the root landing page directory. The host slug
-// is the email value as PB stores it — same shape the SPA routes accept.
+// public identity. Used by the root landing page directory. host_slug is the
+// host's public URL segment (their slug, or email as a fallback) — the same
+// shape the SPA /book/{host}/{slug} routes accept.
 func (a *API) handleListEventTypes(e *core.RequestEvent) error {
 	ets, err := a.Repo.ListActiveEventTypes()
 	if err != nil {
@@ -621,24 +622,24 @@ func hostPublicSlug(h store.Host) string {
 	return h.Email
 }
 
-// findHostBySlug resolves the {host} segment of a public booking URL. It
-// accepts, in order: the host's slug, their email, or their record ID.
+// findHostBySlug resolves the {host} segment of a public booking URL. Accepted
+// forms: an email (contains '@'), a record ID, or a host slug.
 //
-// A slug can never contain '@' (see the users.slug pattern), so slugs and
-// emails cannot collide — and skipping the slug lookup for anything that looks
-// like an email saves a query on the still-common email links.
-func (a *API) findHostBySlug(slugOrEmail string) (store.Host, error) {
-	if !strings.Contains(slugOrEmail, "@") {
-		if host, err := a.Repo.FindHostBySlug(slugOrEmail); err == nil {
-			return host, nil
-		}
+// For a non-email segment the record ID is tried BEFORE the slug. A slug is
+// allowed to look exactly like a PB record ID (both are lowercase-alphanumeric,
+// and the unique index only guards slug-vs-slug, not slug-vs-users.id). Trying
+// the ID first guarantees a real ID always resolves to its own owner and can
+// never be shadowed by another host who set that ID as their slug — keeping
+// every pre-slug ID link valid and preventing impersonation.
+func (a *API) findHostBySlug(seg string) (store.Host, error) {
+	if strings.Contains(seg, "@") {
+		// Emails never collide with IDs or slugs ('@' is excluded from both).
+		return a.Repo.FindHostByEmail(seg)
 	}
-	host, err := a.Repo.FindHostByEmail(slugOrEmail)
-	if err == nil {
+	if host, err := a.Repo.FindHostByID(seg); err == nil {
 		return host, nil
 	}
-	// Fallback: maybe the slug is actually an ID.
-	return a.Repo.FindHostByID(slugOrEmail)
+	return a.Repo.FindHostBySlug(seg)
 }
 
 func mapPipelineErr(e *core.RequestEvent, err error) error {

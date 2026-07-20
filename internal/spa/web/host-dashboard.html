@@ -1166,7 +1166,7 @@
       </div></div>`;
       return;
     }
-    const hostSlug = (auth.record && (auth.record.username || auth.record.email)) || '';
+    const hostSlug = (items[0] && items[0].public_host_slug) || (auth.record && auth.record.email) || '';
     body.innerHTML = `
       <div class="card">
         <div class="card-body flush">

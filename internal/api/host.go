@@ -396,9 +396,18 @@ func (a *API) hostListEventTypes(e *core.RequestEvent) error {
 	if err != nil {
 		return writeErr(e, http.StatusInternalServerError, CodeInternalError, err.Error(), nil)
 	}
+	// Public host slug so the dashboard builds booking URLs from the slug
+	// (or email fallback) instead of leaking the host email. Same for every
+	// row — they all share this owner.
+	var publicSlug string
+	if host, herr := a.Repo.FindHostByID(uid); herr == nil {
+		publicSlug = hostPublicSlug(host)
+	}
 	out := make([]map[string]any, 0, len(recs))
 	for _, r := range recs {
-		out = append(out, eventTypeToMap(r))
+		m := eventTypeToMap(r)
+		m["public_host_slug"] = publicSlug
+		out = append(out, m)
 	}
 	return e.JSON(http.StatusOK, out)
 }
