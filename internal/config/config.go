@@ -40,6 +40,20 @@ type Config struct {
 	RetentionNotificationsDays int
 
 	Providers ProviderConfig
+
+	// MSOAuth holds the ONE dedicated Microsoft-Entra app that all hosts use to
+	// consent their MS365 calendar via the hosted browser OAuth flow
+	// (/oauth/microsoft/...). Optional: empty ⇒ the flow returns 503.
+	MSOAuth MSOAuthConfig
+}
+
+// MSOAuthConfig is the Qognical-wide Microsoft app for delegated calendar
+// consent. client_secret is a secret (env or _FILE). Tenant defaults to
+// "organizations" (any work/school account).
+type MSOAuthConfig struct {
+	ClientID     string
+	ClientSecret string
+	Tenant       string
 }
 
 // SMTPConfig groups SMTP fields. Required for the notifier.
@@ -106,6 +120,14 @@ func LoadStrict() (*Config, error) {
 	cfg.EncryptionKey = getSecret("ENCRYPTION_KEY")
 	if cfg.EncryptionKey == "" {
 		missing = append(missing, "QOGNICAL_ENCRYPTION_KEY (or QOGNICAL_ENCRYPTION_KEY_FILE)")
+	}
+
+	// Microsoft OAuth app (optional — the hosted MS365 browser consent flow).
+	cfg.MSOAuth.ClientID = get("MS_CLIENT_ID")
+	cfg.MSOAuth.ClientSecret = getSecret("MS_CLIENT_SECRET")
+	cfg.MSOAuth.Tenant = get("MS_TENANT")
+	if cfg.MSOAuth.Tenant == "" {
+		cfg.MSOAuth.Tenant = "organizations"
 	}
 
 	cfg.SMTP.Host = get("SMTP_HOST")

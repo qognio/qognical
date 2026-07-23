@@ -161,6 +161,19 @@ func main() {
 			apiInst.RegisterAdmin(se)
 			apiInst.RegisterHost(se)
 			apiInst.RegisterTeam(se)
+			// Hosted Microsoft-365 browser OAuth flow (/oauth/microsoft/...).
+			// Registered before spa.Register so the routes win over the SPA
+			// catch-all. Uses the ONE dedicated Entra app from config.
+			(&api.MSOAuth{
+				App:          app,
+				Repo:         repo,
+				Master:       master,
+				ClientID:     cfgGlobal.MSOAuth.ClientID,
+				ClientSecret: cfgGlobal.MSOAuth.ClientSecret,
+				Tenant:       cfgGlobal.MSOAuth.Tenant,
+				BaseURL:      cfgGlobal.BaseURL,
+				StateKey:     []byte(cfgGlobal.EncryptionKey),
+			}).Register(se)
 			(&webhooks.Inbound{
 				Repo:   repo,
 				Stripe: stripeProv,
