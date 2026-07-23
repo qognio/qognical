@@ -6,10 +6,14 @@ package pipeline
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
+	"strings"
 	"time"
+
+	"github.com/pocketbase/pocketbase/tools/types"
 
 	"github.com/qognio/qognical/internal/adapters"
 	"github.com/qognio/qognical/internal/intake"
@@ -320,6 +324,19 @@ func (p *Pipeline) confirmTail(b store.Booking, et store.EventType, host store.H
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
+	// Demo / webinar mode: if the event-type carries a fixed join URL
+	// (meeting_config.fixed_join_url), mail THAT link to every attendee and
+	// skip meeting + calendar creation entirely. Auto-created Teams meetings
+	// put external attendees in a lobby they can't leave (2026-07-23 NEXUS LIVE
+	// incident) — a fixed link the host set to "everyone bypasses the lobby"
+	// lets anyone just click and join. No per-booking Graph event, no lobby,
+	// one shared room for the whole session.
+	if fixed := fixedJoinURL(et.MeetingConfig); fixed != "" {
+		_ = p.repo.PersistBookingExternals(b.ID, "", "fixed", fixed)
+		b.MeetingJoinURL = fixed
+		return p.notifyConfirmed(b, et, host, tok)
+	}
+
 	// Calendar / Meeting in one shot when the calendar adapter natively
 	// hosts the meeting (MS Graph → Teams Weg 1, Google → Google Meet).
 	// The load error must NOT be discarded: a decrypt failure (e.g. the
@@ -404,6 +421,27 @@ func (p *Pipeline) confirmTail(b store.Booking, et store.EventType, host store.H
 		b.MeetingJoinURL = meetingURL
 	}
 	return p.notifyConfirmed(b, et, host, tok)
+}
+
+// fixedJoinURL reads meeting_config.fixed_join_url from an event-type's
+// meeting_config JSON. Empty when unset/malformed → the normal auto-create
+// flow runs. Only https Teams/meet URLs are accepted so a bad config can't
+// mail a junk or non-https link.
+func fixedJoinURL(meetingConfig types.JSONRaw) string {
+	if len(meetingConfig) == 0 {
+		return ""
+	}
+	var cfg struct {
+		FixedJoinURL string `json:"fixed_join_url"`
+	}
+	if err := json.Unmarshal(meetingConfig, &cfg); err != nil {
+		return ""
+	}
+	u := strings.TrimSpace(cfg.FixedJoinURL)
+	if strings.HasPrefix(u, "https://") {
+		return u
+	}
+	return ""
 }
 
 // recordIntegrationError persists msg to last_error on the host's calendar
