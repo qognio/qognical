@@ -764,10 +764,16 @@ func (r *Repo) FindGroupMeeting(groupSessionID, excludeBookingID string) (meetin
 	if groupSessionID == "" {
 		return "", "", false
 	}
-	recs, err := r.app.FindRecordsByFilter(migrations.CollBookings,
-		"group_session_id = {:gsid} && id != {:excl} && meeting_join_url != ''",
-		"created", 1, 0,
-		dbx.Params{"gsid": groupSessionID, "excl": excludeBookingID})
+	// dbx.NewExp (raw SQL), NOT FindRecordsByFilter: the PocketBase filter
+	// language has no IN operator, so the status clause silently errored and the
+	// query returned nothing → every attendee spawned its own meeting
+	// (2026-07-23). This matches the working CountActiveAtSlot/ActiveBusyForHost.
+	recs, err := r.app.FindAllRecords(migrations.CollBookings,
+		dbx.HashExp{"group_session_id": groupSessionID},
+		dbx.NewExp("id != {:excl}", dbx.Params{"excl": excludeBookingID}),
+		dbx.NewExp("meeting_join_url != ''"),
+		dbx.NewExp("status IN ("+state.ActiveStatusSQLList()+")"),
+	)
 	if err != nil || len(recs) == 0 {
 		return "", "", false
 	}
