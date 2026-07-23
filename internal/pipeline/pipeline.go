@@ -530,9 +530,24 @@ func (p *Pipeline) validate(req Request, et store.EventType, host store.Host, en
 	// calendar integration but we cannot read its busy windows, refuse the
 	// booking rather than risk double-booking around an unknown external
 	// calendar. (No integration → ExternalBusy returns nil and this is a no-op.)
-	extBusy, ebErr := p.ExternalBusy(host.ID, req.StartUTC.Add(-time.Minute), endUTC.Add(time.Minute))
-	if ebErr != nil {
-		return fmt.Errorf("%w: %v", ErrExternalCalendarUnavailable, ebErr)
+	//
+	// Only for SIMPLE single-host, single-attendee events. Group events
+	// (capacity>1) deliberately allow several bookings on one slot — our own
+	// group calendar event would otherwise block the 2nd attendee — and pooled
+	// events need per-host checking that the owner alone can't provide; both
+	// fall back to the local checks until per-host/pool-aware external checking
+	// lands. The busy window is widened by the event's buffers so an external
+	// event ending just inside the buffer still surfaces as a conflict.
+	var externalBusy []timeutil.Interval
+	if len(et.AllHosts()) == 1 && et.EffectiveCapacity() <= 1 {
+		bufBefore := time.Duration(et.BufferBeforeMin) * time.Minute
+		bufAfter := time.Duration(et.BufferAfterMin) * time.Minute
+		eb, ebErr := p.ExternalBusy(host.ID,
+			req.StartUTC.Add(-time.Minute-bufBefore), endUTC.Add(time.Minute+bufAfter))
+		if ebErr != nil {
+			return fmt.Errorf("%w: %v", ErrExternalCalendarUnavailable, ebErr)
+		}
+		externalBusy = eb
 	}
 	// Use slot.ComputeSlots with the busy interval set to "this exact slot,
 	// shifted by 1 second" so the engine confirms the slot start lines up
@@ -548,7 +563,7 @@ func (p *Pipeline) validate(req Request, et store.EventType, host store.Host, en
 		HostTimezone: host.Timezone,
 		Availability: weekRules,
 		Overrides:    overrides,
-		ExternalBusy: extBusy,
+		ExternalBusy: externalBusy,
 		Now:          now,
 		From:         req.StartUTC.Add(-time.Minute),
 		To:           endUTC.Add(time.Minute),

@@ -326,11 +326,23 @@ func (a *API) handleListSlots(e *core.RequestEvent) error {
 	// host's connected calendar can't be read we still render the grid (the
 	// authoritative booking validation fails closed and catches conflicts at
 	// booking time). No integration → nil, no extra call.
-	extBusy, ebErr := a.Pipeline.ExternalBusy(host.ID, from, to.Add(24*time.Hour))
-	if ebErr != nil {
-		slog.Warn("external calendar check failed for slot display",
-			"host", host.ID, "err", ebErr)
-		extBusy = nil
+	//
+	// Only for simple single-host, single-attendee event-types — the same
+	// scope the authoritative validation checks externally. Group/pooled
+	// event-types keep the local-only grid so the owner's calendar can't hide
+	// slots another attendee/pool host could take. The window starts a
+	// buffer_before earlier so an external event just before `from` still
+	// blocks the first slot.
+	var extBusy []timeutil.Interval
+	if len(hostIDs) == 1 && et.EffectiveCapacity() <= 1 {
+		eb, ebErr := a.Pipeline.ExternalBusy(host.ID,
+			from.Add(-time.Duration(et.BufferBeforeMin)*time.Minute), to.Add(24*time.Hour))
+		if ebErr != nil {
+			slog.Warn("external calendar check failed for slot display",
+				"host", host.ID, "err", ebErr)
+		} else {
+			extBusy = eb
+		}
 	}
 	slots, errCompute := slot.ComputeSlots(slot.Input{
 		EventType: slot.EventType{

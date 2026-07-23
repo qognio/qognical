@@ -6,6 +6,7 @@
 package store
 
 import (
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -880,9 +881,14 @@ func (r *Repo) FindIntegrationCredentials(hostID, provider string) (string, []by
 		dbx.Params{"owner": hostID, "provider": provider},
 	)
 	if err != nil {
-		// Not-found is the common case; treat any error as "no integration"
-		// rather than propagating — the caller proceeds without integration.
-		return "", nil, false, nil
+		// Only a genuine "no such record" means "no integration"; a real
+		// store/query error MUST propagate, otherwise a fail-closed caller
+		// (booking validation) would silently proceed as if the host had no
+		// calendar and skip the external conflict check.
+		if errors.Is(err, sql.ErrNoRows) {
+			return "", nil, false, nil
+		}
+		return "", nil, false, err
 	}
 	creds := rec.GetString("credentials")
 	conf := []byte(rec.GetString("config"))
@@ -897,21 +903,40 @@ func (r *Repo) FindIntegrationCredentials(hostID, provider string) (string, []by
 }
 
 // UpdateIntegrationCredentials replaces the encrypted credentials blob on a
-// host's active integration row for a provider. Used to persist rotated OAuth
+// host's active integration row for a provider, but only if the stored blob is
+// still expectedEnc — an atomic compare-and-set. Used to persist rotated OAuth
 // refresh tokens (see adapters.CredentialRotator) so a long-lived integration
-// survives token rotation and process restarts. The blob must already be
-// encrypted by the caller (crypto.Master.Encrypt).
-func (r *Repo) UpdateIntegrationCredentials(hostID, provider, encrypted string) error {
+// survives token rotation and process restarts. The CAS prevents a stale
+// provider instance (e.g. one loaded before a manual reconnect) from clobbering
+// freshly-stored credentials: if another writer changed the blob in the
+// meantime, the conditional UPDATE matches no row and persisted is false. Both
+// blobs must already be encrypted by the caller (crypto.Master.Encrypt).
+func (r *Repo) UpdateIntegrationCredentials(hostID, provider, expectedEnc, newEnc string) (persisted bool, err error) {
 	rec, err := r.app.FindFirstRecordByFilter(
 		migrations.CollIntegrations,
 		"owner = {:owner} && provider = {:provider} && sync_enabled = true",
 		dbx.Params{"owner": hostID, "provider": provider},
 	)
 	if err != nil {
-		return err
+		return false, err
 	}
-	rec.Set("credentials", encrypted)
-	return r.app.Save(rec)
+	// Conditional UPDATE ... WHERE id = ? AND credentials = ? — the DB re-checks
+	// the expected ciphertext atomically, so there is no find→save TOCTOU. A
+	// raw update skips the `updated` autodate bump, which is immaterial for a
+	// silent token rotation.
+	res, err := r.app.DB().Update(
+		migrations.CollIntegrations,
+		dbx.Params{"credentials": newEnc},
+		dbx.HashExp{"id": rec.Id, "credentials": expectedEnc},
+	).Execute()
+	if err != nil {
+		return false, err
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return false, err
+	}
+	return n > 0, nil
 }
 
 // ----- service_tokens -----

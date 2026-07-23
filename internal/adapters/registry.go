@@ -47,7 +47,7 @@ func (r *Registry) RegisterPayment(name string, f PaymentFactory)   { r.payment[
 // (nil, nil) when no calendar integration exists. (nil, err) signals a real
 // problem (decryption fail, malformed JSON).
 func (r *Registry) CalendarForHost(hostID string) (CalendarProvider, error) {
-	creds, conf, provider, err := r.loadIntegration(hostID, "calendar")
+	creds, conf, provider, rawEnc, err := r.loadIntegration(hostID, "calendar")
 	if err != nil {
 		return nil, err
 	}
@@ -66,15 +66,30 @@ func (r *Registry) CalendarForHost(hostID string) (CalendarProvider, error) {
 	// integration survives rotation and process restarts. Best-effort: a
 	// failure only means the older token is reloaded next time.
 	if rot, ok := prov.(CredentialRotator); ok {
+		// lastEnc tracks the ciphertext this instance last persisted so that
+		// sequential rotations from the same provider chain correctly, while a
+		// different instance (from a reconnect) — which starts from a different
+		// ciphertext — cannot win the compare-and-set and clobber it. The
+		// provider serialises token refreshes, so the hook is never re-entered
+		// concurrently for one instance.
+		lastEnc := rawEnc
 		rot.SetOnCredentialChange(func(updated json.RawMessage) {
 			enc, encErr := r.master.Encrypt(updated)
 			if encErr != nil {
 				slog.Warn("encrypt rotated credentials failed", "host", hostID, "provider", provider, "err", encErr)
 				return
 			}
-			if upErr := r.repo.UpdateIntegrationCredentials(hostID, provider, enc); upErr != nil {
+			persisted, upErr := r.repo.UpdateIntegrationCredentials(hostID, provider, lastEnc, enc)
+			if upErr != nil {
 				slog.Warn("persist rotated credentials failed", "host", hostID, "provider", provider, "err", upErr)
+				return
 			}
+			if !persisted {
+				slog.Warn("rotated credentials not persisted: integration changed concurrently",
+					"host", hostID, "provider", provider)
+				return
+			}
+			lastEnc = enc
 		})
 	}
 	return prov, nil
@@ -132,43 +147,48 @@ func (r *Registry) PaymentForName(name string, creds json.RawMessage, conf json.
 //
 // Returns (decryptedCreds, config, providerName, error). (nil,nil,"",nil) when
 // no integration is configured.
-func (r *Registry) loadIntegration(hostID, family string) (json.RawMessage, json.RawMessage, string, error) {
+// loadIntegration returns the decrypted credentials, the config blob, the
+// provider name, and the raw (still-encrypted) credentials ciphertext. The
+// ciphertext is the CAS token callers pass back to
+// store.UpdateIntegrationCredentials so a rotation only overwrites the exact
+// blob it was loaded from.
+func (r *Registry) loadIntegration(hostID, family string) (creds json.RawMessage, conf json.RawMessage, provider string, rawEnc string, err error) {
 	families := map[string][]string{
 		"calendar": {"msgraph", "microsoft", "nextcloud", "google"},
 	}
 	candidates, ok := families[family]
 	if !ok {
-		return nil, nil, "", fmt.Errorf("unknown family %q", family)
+		return nil, nil, "", "", fmt.Errorf("unknown family %q", family)
 	}
 
 	var (
 		names   []string
 		rawCred string
-		conf    json.RawMessage
+		cfg     json.RawMessage
 	)
 	for _, name := range candidates {
-		raw, c, found, err := r.repo.FindIntegrationCredentials(hostID, name)
-		if err != nil {
-			return nil, nil, "", err
+		raw, c, found, ferr := r.repo.FindIntegrationCredentials(hostID, name)
+		if ferr != nil {
+			return nil, nil, "", "", ferr
 		}
 		if !found {
 			continue
 		}
 		names = append(names, name)
-		rawCred, conf = raw, c
+		rawCred, cfg = raw, c
 	}
 
 	switch len(names) {
 	case 0:
-		return nil, nil, "", nil
+		return nil, nil, "", "", nil
 	case 1:
-		creds, err := r.master.Decrypt(rawCred)
-		if err != nil {
-			return nil, nil, "", fmt.Errorf("decrypt %s credentials: %w", names[0], err)
+		dec, derr := r.master.Decrypt(rawCred)
+		if derr != nil {
+			return nil, nil, "", "", fmt.Errorf("decrypt %s credentials: %w", names[0], derr)
 		}
-		return creds, conf, names[0], nil
+		return dec, cfg, names[0], rawCred, nil
 	default:
-		return nil, nil, "", fmt.Errorf(
+		return nil, nil, "", "", fmt.Errorf(
 			"host %s has multiple active %s integrations (%s); disable all but one",
 			hostID, family, strings.Join(names, ", "))
 	}

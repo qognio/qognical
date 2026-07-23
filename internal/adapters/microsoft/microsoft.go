@@ -28,6 +28,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/url"
 	"strings"
 	"sync"
@@ -210,7 +211,13 @@ func (p *Provider) FreeBusy(ctx context.Context, from, to time.Time) ([]timeutil
 	next := fmt.Sprintf("%s/v1.0/%s/calendarView?%s", p.cfg.GraphBase, p.calendarPath(), q.Encode())
 
 	out := []timeutil.Interval{}
-	for pages := 0; next != "" && pages < maxPages; pages++ {
+	for pages := 0; next != ""; pages++ {
+		if pages >= maxPages {
+			// More pages than we're willing to walk: returning a truncated busy
+			// list would let the fail-closed validation free up a genuinely busy
+			// window, so surface it as an error instead of a partial success.
+			return nil, fmt.Errorf("microsoft: calendarView exceeded %d pages with more results pending", maxPages)
+		}
 		var resp struct {
 			Value []struct {
 				Start struct {
@@ -232,10 +239,16 @@ func (p *Provider) FreeBusy(ctx context.Context, from, to time.Time) ([]timeutil
 			if ev.IsCancelled || ev.ShowAs == "free" {
 				continue
 			}
+			// A busy event we can't parse (or with end <= start) might be
+			// hiding a real conflict; for availability we must not silently
+			// drop it — fail so the fail-closed path refuses rather than guesses.
 			s, errS := parseGraphTime(ev.Start.DateTime)
 			e, errE := parseGraphTime(ev.End.DateTime)
 			if errS != nil || errE != nil {
-				continue
+				return nil, fmt.Errorf("microsoft: unparsable busy time (start=%q end=%q)", ev.Start.DateTime, ev.End.DateTime)
+			}
+			if !e.After(s) {
+				return nil, fmt.Errorf("microsoft: busy interval end %s not after start %s", e, s)
 			}
 			out = append(out, timeutil.Interval{Start: s, End: e})
 		}
@@ -299,6 +312,14 @@ func (p *Provider) CreateEvent(ctx context.Context, in adapters.CalendarEvent) (
 	if in.CreateOnlineMeeting && joinURL == "" {
 		if u, ferr := p.fetchJoinURL(ctx, resp.ID); ferr == nil {
 			joinURL = u
+		}
+		if joinURL == "" {
+			// The event exists but still has no Teams join link. We can't return
+			// an error without orphaning it (the pipeline drops the id on error),
+			// so confirm with an empty link — but make the degradation visible
+			// rather than silently clearing last_error downstream.
+			slog.Warn("microsoft: online meeting created without a Teams join URL",
+				"event", resp.ID)
 		}
 	}
 	return adapters.CreatedEvent{
