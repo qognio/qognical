@@ -752,6 +752,28 @@ func (r *Repo) SetCancelTokenHash(id, hash string) error {
 	return r.app.Save(rec)
 }
 
+// FindGroupMeeting returns the meeting_join_url + external_calendar_id of an
+// already-confirmed booking in the same group session, so every attendee of a
+// group event (a webinar) joins ONE shared meeting instead of getting their own
+// isolated room (2026-07-23). found=false when this is the first booking of the
+// session (the caller then creates the meeting). excludeBookingID skips the
+// current row. Small race window: two truly simultaneous first bookings could
+// each create a meeting — acceptable for trickle-in webinar signups.
+func (r *Repo) FindGroupMeeting(groupSessionID, excludeBookingID string) (meetingURL, externalID string, found bool) {
+	if groupSessionID == "" {
+		return "", "", false
+	}
+	recs, err := r.app.FindRecordsByFilter(migrations.CollBookings,
+		"group_session_id = {:gsid} && id != {:excl} && meeting_join_url != ''",
+		"created", 1, 0,
+		dbx.Params{"gsid": groupSessionID, "excl": excludeBookingID})
+	if err != nil || len(recs) == 0 {
+		return "", "", false
+	}
+	rec := recs[0]
+	return rec.GetString("meeting_join_url"), rec.GetString("external_calendar_id"), true
+}
+
 // PersistBookingExternals stores the per-booking calendar/meeting external IDs.
 // Called from the pipeline confirm-tail.
 func (r *Repo) PersistBookingExternals(bookingID, externalCalendarID, provider, meetingURL string) error {
@@ -779,7 +801,7 @@ func (r *Repo) PersistBookingExternals(bookingID, externalCalendarID, provider, 
 // silently without a meeting).
 func (r *Repo) SetCalendarIntegrationError(ownerID, msg string) error {
 	recs, err := r.app.FindRecordsByFilter(migrations.CollIntegrations,
-		"owner = {:owner} && (provider = 'msgraph' || provider = 'nextcloud' || provider = 'google')",
+		"owner = {:owner} && (provider = 'msgraph' || provider = 'microsoft' || provider = 'nextcloud' || provider = 'google')",
 		"", 10, 0, dbx.Params{"owner": ownerID})
 	if err != nil {
 		return err
@@ -872,6 +894,24 @@ func (r *Repo) FindIntegrationCredentials(hostID, provider string) (string, []by
 		}
 	}
 	return creds, conf, true, nil
+}
+
+// UpdateIntegrationCredentials replaces the encrypted credentials blob on a
+// host's active integration row for a provider. Used to persist rotated OAuth
+// refresh tokens (see adapters.CredentialRotator) so a long-lived integration
+// survives token rotation and process restarts. The blob must already be
+// encrypted by the caller (crypto.Master.Encrypt).
+func (r *Repo) UpdateIntegrationCredentials(hostID, provider, encrypted string) error {
+	rec, err := r.app.FindFirstRecordByFilter(
+		migrations.CollIntegrations,
+		"owner = {:owner} && provider = {:provider} && sync_enabled = true",
+		dbx.Params{"owner": hostID, "provider": provider},
+	)
+	if err != nil {
+		return err
+	}
+	rec.Set("credentials", encrypted)
+	return r.app.Save(rec)
 }
 
 // ----- service_tokens -----

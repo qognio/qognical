@@ -113,6 +113,10 @@ var (
 	ErrInvalidRequest          = errors.New("invalid_request")
 	ErrIntakeValidation        = errors.New("intake_validation_failed")
 	ErrCapacityFull            = errors.New("slot_capacity_full")
+	// ErrExternalCalendarUnavailable is returned when the host has a calendar
+	// integration but its busy state could not be read during authoritative
+	// validation (fail-closed). Maps to 503 so the client retries.
+	ErrExternalCalendarUnavailable = errors.New("external_calendar_unavailable")
 )
 
 // Run executes the full creation pipeline.
@@ -335,7 +339,7 @@ func (p *Pipeline) confirmTail(b store.Booking, et store.EventType, host store.H
 	inlineMeeting := false
 	if calProv != nil {
 		switch {
-		case et.LocationType == "online_teams" && calProv.Name() == "msgraph":
+		case et.LocationType == "online_teams" && (calProv.Name() == "msgraph" || calProv.Name() == "microsoft"):
 			inlineMeeting = true
 		case et.LocationType == "online_google_meet" && calProv.Name() == "google":
 			inlineMeeting = true
@@ -352,7 +356,16 @@ func (p *Pipeline) confirmTail(b store.Booking, et store.EventType, host store.H
 		CreateOnlineMeeting: inlineMeeting,
 	}
 	var meetingURL, externalID string
-	if calProv != nil {
+	// Group event (webinar): reuse the ONE meeting created by the first
+	// attendee of this slot so everyone joins the same room, instead of each
+	// booking spawning its own isolated Teams meeting (2026-07-23). Only the
+	// first booking of the group_session falls through to CreateEvent.
+	if b.GroupSessionID != "" {
+		if url, extID, ok := p.repo.FindGroupMeeting(b.GroupSessionID, b.ID); ok {
+			meetingURL, externalID = url, extID
+		}
+	}
+	if meetingURL == "" && calProv != nil {
 		created, err := calProv.CreateEvent(ctx, cev)
 		if err != nil {
 			slog.Error("calendar create failed — booking confirms WITHOUT meeting",
@@ -413,6 +426,27 @@ func (p *Pipeline) registryFor(hostID string) (adapters.CalendarProvider, error)
 		return nil, nil
 	}
 	return p.registry.CalendarForHost(hostID)
+}
+
+// ExternalBusy returns the host's busy intervals from their connected calendar
+// (CalendarProvider.FreeBusy) between from and to, or (nil, nil) when no
+// calendar integration is configured. It manages its own bounded context
+// (the shared HTTP client also enforces a per-call timeout).
+//
+// Callers choose the failure policy: the authoritative booking validation
+// fails CLOSED (refuse when busy state is unknown), while slot display fails
+// OPEN (show the grid, let validation catch conflicts at booking time).
+func (p *Pipeline) ExternalBusy(hostID string, from, to time.Time) ([]timeutil.Interval, error) {
+	prov, err := p.registryFor(hostID)
+	if err != nil {
+		return nil, err
+	}
+	if prov == nil {
+		return nil, nil // no calendar integration → no external constraint
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 25*time.Second)
+	defer cancel()
+	return prov.FreeBusy(ctx, from, to)
 }
 
 func calendarProviderName(p adapters.CalendarProvider) string {
@@ -492,6 +526,14 @@ func (p *Pipeline) validate(req Request, et store.EventType, host store.Host, en
 	if err != nil {
 		return err
 	}
+	// Authoritative external-calendar check, FAIL CLOSED: if the host has a
+	// calendar integration but we cannot read its busy windows, refuse the
+	// booking rather than risk double-booking around an unknown external
+	// calendar. (No integration → ExternalBusy returns nil and this is a no-op.)
+	extBusy, ebErr := p.ExternalBusy(host.ID, req.StartUTC.Add(-time.Minute), endUTC.Add(time.Minute))
+	if ebErr != nil {
+		return fmt.Errorf("%w: %v", ErrExternalCalendarUnavailable, ebErr)
+	}
 	// Use slot.ComputeSlots with the busy interval set to "this exact slot,
 	// shifted by 1 second" so the engine confirms the slot start lines up
 	// with a windowed candidate. Cheap and reuses the production code path.
@@ -506,6 +548,7 @@ func (p *Pipeline) validate(req Request, et store.EventType, host store.Host, en
 		HostTimezone: host.Timezone,
 		Availability: weekRules,
 		Overrides:    overrides,
+		ExternalBusy: extBusy,
 		Now:          now,
 		From:         req.StartUTC.Add(-time.Minute),
 		To:           endUTC.Add(time.Minute),

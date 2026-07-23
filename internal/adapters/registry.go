@@ -3,6 +3,8 @@ package adapters
 import (
 	"encoding/json"
 	"fmt"
+	"log/slog"
+	"strings"
 
 	"github.com/qognio/qognical/internal/crypto"
 	"github.com/qognio/qognical/internal/store"
@@ -56,7 +58,26 @@ func (r *Registry) CalendarForHost(hostID string) (CalendarProvider, error) {
 	if !ok {
 		return nil, fmt.Errorf("calendar provider %q not registered", provider)
 	}
-	return f(creds, conf)
+	prov, err := f(creds, conf)
+	if err != nil {
+		return nil, err
+	}
+	// Persist rotated OAuth secrets (e.g. Microsoft's refresh_token) so the
+	// integration survives rotation and process restarts. Best-effort: a
+	// failure only means the older token is reloaded next time.
+	if rot, ok := prov.(CredentialRotator); ok {
+		rot.SetOnCredentialChange(func(updated json.RawMessage) {
+			enc, encErr := r.master.Encrypt(updated)
+			if encErr != nil {
+				slog.Warn("encrypt rotated credentials failed", "host", hostID, "provider", provider, "err", encErr)
+				return
+			}
+			if upErr := r.repo.UpdateIntegrationCredentials(hostID, provider, enc); upErr != nil {
+				slog.Warn("persist rotated credentials failed", "host", hostID, "provider", provider, "err", upErr)
+			}
+		})
+	}
+	return prov, nil
 }
 
 // MeetingForName builds a MeetingProvider from instance-level config (no
@@ -101,34 +122,54 @@ func (r *Registry) PaymentForName(name string, creds json.RawMessage, conf json.
 }
 
 // loadIntegration walks the `integrations` collection rows for hostID and
-// returns the first one that matches the desired family. Calendar is the
-// only family currently host-scoped; meeting + payment are instance-scoped.
+// returns the single active integration for the desired family. Calendar is
+// the only family currently host-scoped; meeting + payment are instance-scoped.
 //
-// Returns (decryptedCreds, config, providerName, error).
+// If a host has MORE than one active integration for the family (e.g. both
+// msgraph and microsoft enabled), the choice is ambiguous — silently taking the
+// first by list order would let one provider shadow another, so we return a
+// visible configuration error instead of guessing which calendar is canonical.
+//
+// Returns (decryptedCreds, config, providerName, error). (nil,nil,"",nil) when
+// no integration is configured.
 func (r *Registry) loadIntegration(hostID, family string) (json.RawMessage, json.RawMessage, string, error) {
-	// For Phase 3 we only persist calendar integrations per host. The
-	// concrete query lives in store; we accept a soft "look up by family"
-	// using known provider names per family.
 	families := map[string][]string{
-		"calendar": {"msgraph", "nextcloud", "google"},
+		"calendar": {"msgraph", "microsoft", "nextcloud", "google"},
 	}
 	candidates, ok := families[family]
 	if !ok {
 		return nil, nil, "", fmt.Errorf("unknown family %q", family)
 	}
+
+	var (
+		names   []string
+		rawCred string
+		conf    json.RawMessage
+	)
 	for _, name := range candidates {
-		raw, conf, found, err := r.repo.FindIntegrationCredentials(hostID, name)
+		raw, c, found, err := r.repo.FindIntegrationCredentials(hostID, name)
 		if err != nil {
 			return nil, nil, "", err
 		}
 		if !found {
 			continue
 		}
-		creds, err := r.master.Decrypt(raw)
-		if err != nil {
-			return nil, nil, "", fmt.Errorf("decrypt %s credentials: %w", name, err)
-		}
-		return creds, conf, name, nil
+		names = append(names, name)
+		rawCred, conf = raw, c
 	}
-	return nil, nil, "", nil
+
+	switch len(names) {
+	case 0:
+		return nil, nil, "", nil
+	case 1:
+		creds, err := r.master.Decrypt(rawCred)
+		if err != nil {
+			return nil, nil, "", fmt.Errorf("decrypt %s credentials: %w", names[0], err)
+		}
+		return creds, conf, names[0], nil
+	default:
+		return nil, nil, "", fmt.Errorf(
+			"host %s has multiple active %s integrations (%s); disable all but one",
+			hostID, family, strings.Join(names, ", "))
+	}
 }
