@@ -336,7 +336,13 @@ func (p *Pipeline) confirmTail(b store.Booking, et store.EventType, host store.H
 	// lets anyone just click and join. No per-booking Graph event, no lobby,
 	// one shared room for the whole session.
 	if fixed := fixedJoinURL(et.MeetingConfig); fixed != "" {
-		_ = p.repo.PersistBookingExternals(b.ID, "", "fixed", fixed)
+		// Empty provider: external_calendar_provider is a SelectField that only
+		// accepts the real calendar providers, so "fixed" would fail validation
+		// and abort the whole Save (meeting_join_url included). We only need the
+		// join URL here — no external calendar event exists.
+		if err := p.repo.PersistBookingExternals(b.ID, "", "", fixed); err != nil {
+			slog.Error("fixed-link persist failed", "booking", b.ID, "err", err)
+		}
 		b.MeetingJoinURL = fixed
 		return p.notifyConfirmed(b, et, host, tok)
 	}
