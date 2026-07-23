@@ -7,7 +7,6 @@ package api
 import (
 	"errors"
 	"fmt"
-	"log/slog"
 	"net/http"
 	"strings"
 	"time"
@@ -322,16 +321,6 @@ func (a *API) handleListSlots(e *core.RequestEvent) error {
 	if err != nil {
 		return internalErrLog(e, err, "ActiveBusy")
 	}
-	// External-calendar busy windows for the display grid, FAIL OPEN: if the
-	// host's connected calendar can't be read we still render the grid (the
-	// authoritative booking validation fails closed and catches conflicts at
-	// booking time). No integration → nil, no extra call.
-	extBusy, ebErr := a.Pipeline.ExternalBusy(host.ID, from, to.Add(24*time.Hour))
-	if ebErr != nil {
-		slog.Warn("external calendar check failed for slot display",
-			"host", host.ID, "err", ebErr)
-		extBusy = nil
-	}
 	slots, errCompute := slot.ComputeSlots(slot.Input{
 		EventType: slot.EventType{
 			DurationMin: et.DurationMin, BufferBeforeMin: et.BufferBeforeMin,
@@ -342,7 +331,6 @@ func (a *API) handleListSlots(e *core.RequestEvent) error {
 		Availability: availability,
 		Overrides:    overrides,
 		LocalBusy:    busy,
-		ExternalBusy: extBusy,
 		Now:          time.Now().UTC(),
 		From:         from.UTC(),
 		To:           to.Add(24 * time.Hour).UTC(),
@@ -670,9 +658,6 @@ func mapPipelineErr(e *core.RequestEvent, err error) error {
 		return writeErr(e, httpStatusFor(CodeSlotTooFar), CodeSlotTooFar, "slot beyond max_horizon", nil)
 	case errors.Is(err, pipeline.ErrInvalidRequest):
 		return writeErr(e, http.StatusBadRequest, CodeInvalidRequest, err.Error(), nil)
-	case errors.Is(err, pipeline.ErrExternalCalendarUnavailable):
-		return writeErr(e, httpStatusFor(CodeIntegrationUnavailable), CodeIntegrationUnavailable,
-			"could not verify external calendar availability, please retry", nil)
 	}
 	if strings.Contains(err.Error(), "intake_validation_failed") {
 		return writeErr(e, http.StatusBadRequest, CodeIntakeValidationFailed, err.Error(), nil)

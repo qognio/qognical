@@ -113,10 +113,6 @@ var (
 	ErrInvalidRequest          = errors.New("invalid_request")
 	ErrIntakeValidation        = errors.New("intake_validation_failed")
 	ErrCapacityFull            = errors.New("slot_capacity_full")
-	// ErrExternalCalendarUnavailable is returned when the host has a calendar
-	// integration but its busy state could not be read during authoritative
-	// validation (fail-closed). Maps to 503 so the client retries.
-	ErrExternalCalendarUnavailable = errors.New("external_calendar_unavailable")
 )
 
 // Run executes the full creation pipeline.
@@ -339,7 +335,7 @@ func (p *Pipeline) confirmTail(b store.Booking, et store.EventType, host store.H
 	inlineMeeting := false
 	if calProv != nil {
 		switch {
-		case et.LocationType == "online_teams" && (calProv.Name() == "msgraph" || calProv.Name() == "microsoft"):
+		case et.LocationType == "online_teams" && calProv.Name() == "msgraph":
 			inlineMeeting = true
 		case et.LocationType == "online_google_meet" && calProv.Name() == "google":
 			inlineMeeting = true
@@ -428,27 +424,6 @@ func (p *Pipeline) registryFor(hostID string) (adapters.CalendarProvider, error)
 	return p.registry.CalendarForHost(hostID)
 }
 
-// ExternalBusy returns the host's busy intervals from their connected calendar
-// (CalendarProvider.FreeBusy) between from and to, or (nil, nil) when no
-// calendar integration is configured. It manages its own bounded context
-// (the shared HTTP client also enforces a per-call timeout).
-//
-// Callers choose the failure policy: the authoritative booking validation
-// fails CLOSED (refuse when busy state is unknown), while slot display fails
-// OPEN (show the grid, let validation catch conflicts at booking time).
-func (p *Pipeline) ExternalBusy(hostID string, from, to time.Time) ([]timeutil.Interval, error) {
-	prov, err := p.registryFor(hostID)
-	if err != nil {
-		return nil, err
-	}
-	if prov == nil {
-		return nil, nil // no calendar integration → no external constraint
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), 25*time.Second)
-	defer cancel()
-	return prov.FreeBusy(ctx, from, to)
-}
-
 func calendarProviderName(p adapters.CalendarProvider) string {
 	if p == nil {
 		return ""
@@ -526,14 +501,6 @@ func (p *Pipeline) validate(req Request, et store.EventType, host store.Host, en
 	if err != nil {
 		return err
 	}
-	// Authoritative external-calendar check, FAIL CLOSED: if the host has a
-	// calendar integration but we cannot read its busy windows, refuse the
-	// booking rather than risk double-booking around an unknown external
-	// calendar. (No integration → ExternalBusy returns nil and this is a no-op.)
-	extBusy, ebErr := p.ExternalBusy(host.ID, req.StartUTC.Add(-time.Minute), endUTC.Add(time.Minute))
-	if ebErr != nil {
-		return fmt.Errorf("%w: %v", ErrExternalCalendarUnavailable, ebErr)
-	}
 	// Use slot.ComputeSlots with the busy interval set to "this exact slot,
 	// shifted by 1 second" so the engine confirms the slot start lines up
 	// with a windowed candidate. Cheap and reuses the production code path.
@@ -548,7 +515,6 @@ func (p *Pipeline) validate(req Request, et store.EventType, host store.Host, en
 		HostTimezone: host.Timezone,
 		Availability: weekRules,
 		Overrides:    overrides,
-		ExternalBusy: extBusy,
 		Now:          now,
 		From:         req.StartUTC.Add(-time.Minute),
 		To:           endUTC.Add(time.Minute),
@@ -599,12 +565,26 @@ func (p *Pipeline) Cancel(bookingID, reason, actor, ip string) (store.Booking, e
 	et, _ := p.repo.FindEventTypeByID(b.EventTypeID)
 	host, _ := p.repo.FindHostByID(b.HostID)
 
-	// Cascade to external calendar / meeting providers.
+	// Cascade to external calendar / meeting providers — but for a GROUP event
+	// the meeting is SHARED, so only delete it when no other active attendee of
+	// the same session still references it. Otherwise the first attendee's
+	// cancellation would kill the whole webinar's join link (2026-07-23).
 	if b.ExternalCalendarID != "" {
-		if calProv, _ := p.registryFor(host.ID); calProv != nil {
-			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-			_ = calProv.DeleteEvent(ctx, b.ExternalCalendarID)
-			cancel()
+		shared := false
+		if b.GroupSessionID != "" {
+			if _, extID, ok := p.repo.FindGroupMeeting(b.GroupSessionID, b.ID); ok && extID == b.ExternalCalendarID {
+				shared = true
+			}
+		}
+		if !shared {
+			if calProv, _ := p.registryFor(host.ID); calProv != nil {
+				ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+				_ = calProv.DeleteEvent(ctx, b.ExternalCalendarID)
+				cancel()
+			}
+		} else {
+			slog.Info("group meeting kept — other attendees still reference it",
+				"booking", b.ID, "group", b.GroupSessionID)
 		}
 	}
 

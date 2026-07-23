@@ -29,7 +29,6 @@ import (
 	"github.com/qognio/qognical/internal/adapters"
 	"github.com/qognio/qognical/internal/adapters/google"
 	"github.com/qognio/qognical/internal/adapters/jitsi"
-	"github.com/qognio/qognical/internal/adapters/microsoft"
 	"github.com/qognio/qognical/internal/adapters/msgraph"
 	"github.com/qognio/qognical/internal/adapters/nextcloud"
 	"github.com/qognio/qognical/internal/adapters/paypal"
@@ -125,7 +124,6 @@ func main() {
 		// providers are instance-scoped (one Stripe key per qognical instance).
 		registry := adapters.NewRegistry(repo, master)
 		registry.RegisterCalendar(msgraph.Name, msgraph.Factory)
-		registry.RegisterCalendar(microsoft.Name, microsoft.Factory)
 		registry.RegisterCalendar(nextcloud.Name, nextcloud.Factory)
 		registry.RegisterCalendar(google.Name, google.Factory)
 		registry.RegisterMeeting(jitsi.Name, jitsi.Factory)

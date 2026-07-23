@@ -57,7 +57,7 @@ ids, etc.) can be supplied via --config-file.`,
 				return errors.New("--owner, --provider and --credentials-file are required")
 			}
 			if !validProvider(provider) {
-				return fmt.Errorf("unknown provider %q (msgraph/microsoft/nextcloud/google/jitsi/stripe/paypal)", provider)
+				return fmt.Errorf("unknown provider %q (msgraph/nextcloud/google/jitsi/stripe/paypal)", provider)
 			}
 
 			cfg, err := config.LoadStrict()
@@ -127,7 +127,7 @@ ids, etc.) can be supplied via --config-file.`,
 		},
 	}
 	c.Flags().StringVar(&owner, "owner", "", "users.id of the host the integration belongs to")
-	c.Flags().StringVar(&provider, "provider", "", "msgraph|microsoft|nextcloud|google|jitsi|stripe|paypal")
+	c.Flags().StringVar(&provider, "provider", "", "msgraph|nextcloud|google|jitsi|stripe|paypal")
 	c.Flags().StringVar(&credsFile, "credentials-file", "", "JSON file with plaintext credentials (encrypted on the way in)")
 	c.Flags().StringVar(&configFile, "config-file", "", "optional JSON file with unencrypted config overrides")
 	c.Flags().BoolVar(&enable, "enable", true, "set sync_enabled=true (default true)")
@@ -188,7 +188,7 @@ func ctxJSON(_ context.Context, v any) error {
 
 func validProvider(p string) bool {
 	switch p {
-	case "msgraph", "microsoft", "nextcloud", "google", "jitsi", "stripe", "paypal":
+	case "msgraph", "nextcloud", "google", "jitsi", "stripe", "paypal":
 		return true
 	}
 	return false

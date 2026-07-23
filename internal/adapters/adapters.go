@@ -10,7 +10,6 @@ package adapters
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"time"
 
@@ -48,19 +47,6 @@ type CalendarProvider interface {
 
 	// Name returns the provider identifier for logs (msgraph/nextcloud/google).
 	Name() string
-}
-
-// CredentialRotator is an OPTIONAL interface a CalendarProvider may implement
-// when the identity provider rotates a stored secret on use — notably an OAuth
-// refresh_token that Microsoft/Google replace on each refresh. The registry
-// wires the callback to persist the updated, re-encrypted credentials so a
-// rotated token survives both this process and future restarts; without it a
-// long-lived integration eventually stops working when the originally stored
-// token is superseded. The callback must be cheap and best-effort (log, don't
-// fail the request): a persistence miss only degrades to "reconnect sooner".
-// Providers that never rotate stored secrets simply don't implement it.
-type CredentialRotator interface {
-	SetOnCredentialChange(func(updatedCreds json.RawMessage))
 }
 
 // CalendarEvent is the provider-agnostic event payload.
