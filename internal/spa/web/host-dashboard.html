@@ -1587,24 +1587,28 @@
     {
       key: 'msgraph', name: 'Microsoft 365',
       blurb: 'Outlook-Kalender + Teams-Meetings über Microsoft Graph.',
-      logoText: 'M', logoColor: '#0078d4',
+      logoText: 'M', logoColor: '#0078d4', canConnect: true,
     },
     {
       key: 'google', name: 'Google Calendar',
       blurb: 'Kalender-Sync + automatische Google-Meet-Links.',
-      logoText: 'G', logoColor: '#1a73e8',
+      logoText: 'G', logoColor: '#1a73e8', canConnect: false,
     },
     {
       key: 'jitsi', name: 'Jitsi Meet',
       blurb: 'Selbst gehostete Videokonferenz-Links pro Termin.',
-      logoText: 'J', logoColor: '#1c6f3b',
+      logoText: 'J', logoColor: '#1c6f3b', canConnect: false,
     },
   ];
 
   async function renderIntegrations(body, actions) {
     body.innerHTML = `<div style="color:var(--muted);">Wird geladen…</div>`;
     const list = await api('/api/host/integrations').catch(() => []);
-    const byKey = Object.fromEntries((list || []).map(x => [x.provider, x]));
+    // Provider-Alias: der gehostete Browser-OAuth-Flow speichert die Integration
+    // als "microsoft", die Karte hier heißt aber "msgraph" — ohne Mapping zeigte
+    // die Microsoft-365-Karte „Nicht verbunden", obwohl die Verbindung existiert.
+    const PROVIDER_ALIAS = { microsoft: 'msgraph' };
+    const byKey = Object.fromEntries((list || []).map(x => [PROVIDER_ALIAS[x.provider] || x.provider, x]));
     body.innerHTML = `<div class="integrations">${PROVIDERS.map(p => {
       const i = byKey[p.key];
       const connected = !!i;
@@ -1625,9 +1629,13 @@
           <span>${connected && i.last_sync_at ? 'Letzter Sync: ' + esc(fmtRel(i.last_sync_at)) : 'Noch kein Sync'}</span>
           <div class="actions">
             ${connected
-              ? `<button class="btn sm ghost" data-test="${escAttr(i.id)}">Test</button>
-                 <button class="btn sm danger" data-disc="${escAttr(i.id)}">Trennen</button>`
-              : `<button class="btn sm primary" data-conn="${escAttr(p.key)}">Verbinden</button>`}
+              /* Kein Test-Button: /api/host/integrations/{id}/test ist im
+                 Backend nicht registriert — der Klick liefe auf ein 404. */
+              ? `<button class="btn sm danger" data-disc="${escAttr(i.id)}">Trennen</button>`
+              : (p.canConnect
+                  ? `<button class="btn sm primary" data-conn="${escAttr(p.key)}">Verbinden</button>`
+                  /* google/jitsi: Connect-Endpoints existieren im Backend nicht */
+                  : `<button class="btn sm ghost" disabled title="In dieser Instanz noch nicht verfügbar">Bald verfügbar</button>`)}
           </div>
         </div>
         ${connected && i.last_error
