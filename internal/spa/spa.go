@@ -43,7 +43,26 @@ func Register(se *core.ServeEvent, baseURL, orgName string) {
 		}
 	}
 
-	se.Router.GET("/", serveFile("web/index.html", orgName, nil))
+	// "/" ist in ServeMux-Semantik der Subtree-Catch-all — JEDER nicht anderweitig
+	// gematchte GET landet hier (eigene Catch-all-Muster wie "/{path...}" oder
+	// "/{host}/{slug}" kollidieren mit "/" bzw. PBs "/_/{path...}" → Boot-Panic).
+	// Deshalb sitzt der Kurzlink-Redirect /{host}/{slug} → /book/{host}/{slug}
+	// direkt HIER: frühe Setup-Mails verschickten Buchungslinks ohne das
+	// /book/-Präfix, das book.html strikt verlangt.
+	indexHandler := serveFile("web/index.html", orgName, nil)
+	se.Router.GET("/", func(e *core.RequestEvent) error {
+		seg := strings.Split(strings.Trim(e.Request.URL.Path, "/"), "/")
+		if len(seg) == 2 && seg[0] != "" && seg[1] != "" {
+			switch seg[0] {
+			case "api", "book", "host", "admin", "manage", "oauth", "_", "embed.js":
+				// interne Präfixe: kein Redirect auf die Buchungsseite
+			default:
+				return e.Redirect(http.StatusFound,
+					"/book/"+url.PathEscape(seg[0])+"/"+url.PathEscape(seg[1]))
+			}
+		}
+		return indexHandler(e)
+	})
 	se.Router.GET("/book/{host}/{slug}", serveFile("web/book.html", orgName, embedOrigins))
 	se.Router.GET("/manage/{id}", serveFile("web/manage.html", orgName, nil))
 	se.Router.GET("/admin/forms", serveFile("web/form-builder.html", orgName, nil))
@@ -58,22 +77,6 @@ func Register(se *core.ServeEvent, baseURL, orgName string) {
 
 	se.Router.GET("/embed.js", serveEmbed())
 
-	// Kurz-/Legacy-Buchungslinks: /{host}/{slug} → /book/{host}/{slug}.
-	// Frühe Setup-Mails verschickten Links ohne das /book/-Präfix; book.html
-	// verlangt es aber strikt (section !== 'book' ⇒ „resource wasn't found").
-	// Literale Routen gewinnen im Router gegen diesen Wildcard; interne
-	// Präfixe sind zusätzlich ausgenommen, damit vertippte API-/Konsolen-
-	// Pfade ein sauberes 404 statt einer Buchungsseite bekommen.
-	se.Router.GET("/{host}/{slug}", func(e *core.RequestEvent) error {
-		host := e.Request.PathValue("host")
-		slug := e.Request.PathValue("slug")
-		switch host {
-		case "api", "book", "host", "admin", "manage", "oauth", "_", "embed.js":
-			return e.String(http.StatusNotFound, "not found")
-		}
-		return e.Redirect(http.StatusFound,
-			"/book/"+url.PathEscape(host)+"/"+url.PathEscape(slug))
-	})
 }
 
 func serveEmbed() func(e *core.RequestEvent) error {
