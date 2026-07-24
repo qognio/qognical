@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/pocketbase/dbx"
+	"github.com/pocketbase/pocketbase/apis"
 	"github.com/pocketbase/pocketbase/core"
 
 	"github.com/qognio/qognical/internal/adapters/httpx"
@@ -45,7 +46,14 @@ type MSOAuth struct {
 }
 
 func (m *MSOAuth) Register(se *core.ServeEvent) {
-	se.Router.GET("/oauth/microsoft/start", m.handleStart)
+	// /start MUST be authenticated: it mints the HMAC-signed state that binds
+	// the whole consent round-trip to a specific host. If it were public,
+	// anyone could mint a valid state for any host and — after consenting with
+	// their OWN Microsoft account — bind their calendar to the victim host,
+	// leaking that host's bookings (as calendar invites) and hijacking its
+	// availability. /callback stays public because Microsoft redirects an
+	// unauthenticated browser there; it trusts only the signed state.
+	se.Router.GET("/oauth/microsoft/start", m.handleStart).Bind(apis.RequireAuth("users"))
 	se.Router.GET("/oauth/microsoft/callback", m.handleCallback)
 }
 
@@ -99,26 +107,25 @@ func (m *MSOAuth) verifyState(state string) (string, error) {
 	return pp[0], nil
 }
 
-// GET /oauth/microsoft/start?host=<email|slug> — resolves the host, then
-// redirects the browser to Microsoft's consent screen.
+// GET /oauth/microsoft/start — for the AUTHENTICATED host, redirects the
+// browser to Microsoft's consent screen. The host connects THEIR OWN calendar,
+// so the host id comes from the session (apis.RequireAuth on the route), never
+// from a client-supplied parameter.
 func (m *MSOAuth) handleStart(e *core.RequestEvent) error {
 	if !m.configured() {
 		return e.HTML(http.StatusServiceUnavailable, simpleHTML("Nicht verfügbar",
 			"Die Microsoft-Anbindung ist auf diesem Server noch nicht konfiguriert."))
 	}
-	hostQuery := strings.TrimSpace(e.Request.URL.Query().Get("host"))
-	if hostQuery == "" {
-		return e.HTML(http.StatusBadRequest, simpleHTML("Fehler", "Es fehlt der host-Parameter."))
+	// Defense in depth — RequireAuth already rejects anonymous requests.
+	if e.Auth == nil {
+		return e.HTML(http.StatusUnauthorized, simpleHTML("Anmeldung nötig",
+			"Bitte melde dich in deinem Qognical-Konto an, um deinen Kalender zu verbinden."))
 	}
-	host, err := m.Repo.FindHostByEmail(hostQuery)
-	if err != nil {
-		host, err = m.Repo.FindHostBySlug(hostQuery)
-		if err != nil {
-			return e.HTML(http.StatusNotFound, simpleHTML("Host nicht gefunden",
-				"Zu diesem Zugang gibt es keinen Qognical-Host."))
-		}
+	if e.Auth.GetString("role") != "host" {
+		return e.HTML(http.StatusForbidden, simpleHTML("Nicht erlaubt",
+			"Nur Host-Konten können einen Kalender verbinden."))
 	}
-	state := m.signState(host.ID, time.Now().Add(15*time.Minute).Unix())
+	state := m.signState(e.Auth.Id, time.Now().Add(15*time.Minute).Unix())
 	q := url.Values{}
 	q.Set("client_id", m.ClientID)
 	q.Set("response_type", "code")

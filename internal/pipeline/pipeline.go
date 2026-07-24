@@ -252,6 +252,15 @@ func (p *Pipeline) Run(req Request) (Result, error) {
 		// (verifiziert 2026-07-24). confirmTail hat ein eigenes 30s-Context-
 		// Timeout + loggt Fehler; Meeting/Mail sind best-effort (INV-5).
 		go func(b store.Booking, et store.EventType, h store.Host, t token.Token) {
+			// net/http only recovers panics in the request goroutine, not in
+			// spawned ones — without this a panic in the meeting/SMTP path
+			// (adapter, template, notifier) would crash the whole process and
+			// take down every booking, not just this one.
+			defer func() {
+				if r := recover(); r != nil {
+					slog.Error("confirm tail panic", "booking", b.ID, "panic", r)
+				}
+			}()
 			if err := p.confirmTail(b, et, h, t); err != nil {
 				slog.Warn("confirm tail failed", "booking", b.ID, "err", err)
 			}

@@ -79,7 +79,7 @@ func (a *API) handleApprovalAction(e *core.RequestEvent, decline bool) error {
 // token back to the same path. Token in a hidden field, page marked no-store.
 func confirmActionHTML(bookingID, action, tok, verb string) string {
 	post := "/api/public/v1/bookings/" + html.EscapeString(bookingID) + "/" + action
-	return simpleHTML(verb,
+	return simpleHTMLPage(verb,
 		`Bitte bestätige die Aktion.</p>
 <form method="POST" action="`+post+`" style="margin-top:16px">
   <input type="hidden" name="token" value="`+html.EscapeString(tok)+`">
@@ -92,9 +92,19 @@ func confirmActionHTML(bookingID, action, tok, verb string) string {
 // via Tokens.Verify on the API struct above.
 var _ = token.Action("")
 
-// simpleHTML wraps a title + paragraph in a minimal centered card. Used for
-// host-facing one-shot pages (approve / decline confirmation).
+// simpleHTML wraps an untrusted title + paragraph text in a minimal centered
+// card. Both are HTML-escaped, so reflected query params or upstream error
+// bodies (e.g. the OAuth callback's ?error / Microsoft error strings) cannot
+// inject markup. Callers that must emit trusted markup use simpleHTMLPage.
 func simpleHTML(title, body string) string {
+	return simpleHTMLPage(title, html.EscapeString(body))
+}
+
+// simpleHTMLPage renders an (escaped) title around a RAW body. bodyHTML is
+// inserted verbatim, so callers MUST pass only trusted / already-escaped
+// markup (see confirmActionHTML). For untrusted text use simpleHTML.
+func simpleHTMLPage(title, bodyHTML string) string {
+	title = html.EscapeString(title)
 	return `<!doctype html><html lang="de"><head><meta charset="utf-8">
 <title>` + title + `</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -107,6 +117,6 @@ body { font: 16px/1.5 system-ui, sans-serif; background:#f6f7fb;
 h1 { font-size:1.4rem; margin:0 0 8px; }
 p { color:#444; margin:0; }
 </style></head><body>
-<div class="card"><h1>` + title + `</h1><p>` + body + `</p></div>
+<div class="card"><h1>` + title + `</h1><p>` + bodyHTML + `</p></div>
 </body></html>`
 }
