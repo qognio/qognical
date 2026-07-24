@@ -57,8 +57,12 @@ func Register(se *core.ServeEvent, baseURL, orgName string) {
 			case "api", "book", "host", "admin", "manage", "oauth", "_", "embed.js":
 				// interne Präfixe: kein Redirect auf die Buchungsseite
 			default:
-				return e.Redirect(http.StatusFound,
-					"/book/"+url.PathEscape(seg[0])+"/"+url.PathEscape(seg[1]))
+				// Query-String erhalten (?embed=…, UTM-Parameter etc.)
+				target := "/book/" + url.PathEscape(seg[0]) + "/" + url.PathEscape(seg[1])
+				if q := e.Request.URL.RawQuery; q != "" {
+					target += "?" + q
+				}
+				return e.Redirect(http.StatusFound, target)
 			}
 		}
 		return indexHandler(e)

@@ -1051,7 +1051,7 @@
         <div class="card">
           <div class="card-head">
             <h2>Nächste Termine</h2>
-            <span class="meta">5 anstehend</span>
+            <span class="meta" id="upCount"></span>
           </div>
           <div class="card-body flush" id="upcoming">
             <div class="empty"><span class="shimmer">&nbsp;&nbsp;&nbsp;&nbsp;</span></div>
@@ -1111,6 +1111,9 @@
     }
 
     const up = $('#upcoming');
+    // Badge war ein Template-Hardcode („5 anstehend") — jetzt echte Anzahl.
+    const upN = Array.isArray(bookings) ? bookings.length : 0;
+    $('#upCount').textContent = upN ? `${upN} anstehend` : '';
     if (bookings && bookings._err) {
       up.innerHTML = `<div class="empty">${esc(bookings._err)}</div>`;
     } else {
