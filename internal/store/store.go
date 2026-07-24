@@ -945,6 +945,40 @@ func (r *Repo) UpdateIntegrationCredentials(hostID, provider, expectedEnc, newEn
 	return n > 0, nil
 }
 
+// calendarFamilyProviders are the providers that map onto a host's ONE external
+// calendar. Only a single one may be sync_enabled at a time — the adapter
+// registry refuses to guess between several active ones (see
+// registry.loadIntegration; keep this list in sync with it).
+var calendarFamilyProviders = map[string]bool{
+	"msgraph": true, "microsoft": true, "nextcloud": true, "google": true,
+}
+
+// DeactivateOtherCalendarIntegrations disables (sync_enabled=false) every other
+// active calendar-family integration for hostID, keeping only keepProvider.
+// Call it whenever a calendar provider is connected/enabled: without it a host
+// who wires up a second calendar ends up with two active rows, and
+// CalendarForHost then hard-errors — which fails booking validation closed
+// (ErrExternalCalendarUnavailable). "Most recently connected wins."
+func (r *Repo) DeactivateOtherCalendarIntegrations(hostID, keepProvider string) error {
+	recs, err := r.app.FindAllRecords(migrations.CollIntegrations,
+		dbx.HashExp{"owner": hostID},
+	)
+	if err != nil {
+		return err
+	}
+	for _, rec := range recs {
+		prov := rec.GetString("provider")
+		if prov == keepProvider || !rec.GetBool("sync_enabled") || !calendarFamilyProviders[prov] {
+			continue
+		}
+		rec.Set("sync_enabled", false)
+		if err := r.app.Save(rec); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // ----- service_tokens -----
 
 type ServiceTokenRecord struct {

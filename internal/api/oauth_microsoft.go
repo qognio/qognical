@@ -240,7 +240,14 @@ func (m *MSOAuth) handleCallback(e *core.RequestEvent) error {
 		}
 		rec.Set("credentials", ciphertext)
 		rec.Set("sync_enabled", true)
-		return txApp.Save(rec)
+		if err := txApp.Save(rec); err != nil {
+			return err
+		}
+		// Enforce one active calendar per host: connecting Microsoft disables any
+		// other active calendar provider (msgraph/google/nextcloud). Otherwise
+		// two active rows make CalendarForHost hard-error and fail bookings
+		// closed. Same transaction so it is atomic with the enable above.
+		return m.Repo.WithTx(txApp).DeactivateOtherCalendarIntegrations(hostID, msProvider)
 	})
 	if err != nil {
 		return e.HTML(http.StatusInternalServerError, simpleHTML("Fehler",

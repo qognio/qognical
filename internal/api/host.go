@@ -820,7 +820,15 @@ func (a *API) hostCreateMSGraphIntegration(e *core.RequestEvent) error {
 	r.Set("config", "{}")
 	r.Set("sync_enabled", true)
 	r.Set("last_error", "")
-	if err := e.App.Save(r); err != nil {
+	// Save + enforce one-active-calendar atomically: enabling msgraph disables
+	// any other active calendar provider for this host. Two active rows make
+	// CalendarForHost hard-error and fail booking validation closed.
+	if err := e.App.RunInTransaction(func(txApp core.App) error {
+		if err := txApp.Save(r); err != nil {
+			return err
+		}
+		return a.Repo.WithTx(txApp).DeactivateOtherCalendarIntegrations(uid, "msgraph")
+	}); err != nil {
 		return writeErr(e, http.StatusBadRequest, CodeInvalidRequest, err.Error(), nil)
 	}
 	return e.JSON(http.StatusCreated, map[string]any{
