@@ -217,7 +217,7 @@
 
     <div id="err" class="error" hidden></div>
 
-    <button class="btn-oidc" id="oidc">
+    <button class="btn-oidc" id="oidc" hidden style="display:none">
       <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
         <path d="M12 2 3 7v6c0 5 3.8 8.5 9 9 5.2-.5 9-4 9-9V7l-9-5Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/>
         <path d="m8 12 3 3 5-6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
@@ -225,9 +225,9 @@
       Mit Authentik anmelden
     </button>
 
-    <div class="divider">oder</div>
+    <div class="divider" hidden style="display:none">oder</div>
 
-    <form class="fallback" id="pwForm" hidden autocomplete="on">
+    <form class="fallback" id="pwForm" autocomplete="on">
       <div class="field">
         <label for="email">E-Mail</label>
         <input id="email" type="email" autocomplete="username" required>
@@ -239,12 +239,12 @@
       <button class="btn-pw" id="pwBtn" type="submit">Anmelden</button>
     </form>
 
-    <div class="toggle">
+    <div class="toggle" hidden>
       <button id="toggle" type="button">Lokales Passwort verwenden</button>
     </div>
 
     <div class="meta">
-      Probleme beim Anmelden? <a href="mailto:support@example.com">Support kontaktieren</a>
+      Probleme beim Anmelden? <a href="mailto:support@qognio.com">Support kontaktieren</a>
     </div>
   </section>
 </main>
@@ -288,7 +288,7 @@
     btn.disabled = true;
     btn.textContent = 'Anmelden…';
     try {
-      const res = await fetch('/api/host/auth/password', {
+      const res = await fetch('/api/collections/users/auth-with-password', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

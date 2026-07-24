@@ -12,6 +12,7 @@ import (
 	"bytes"
 	"embed"
 	"net/http"
+	"net/url"
 	"os"
 	"strings"
 
@@ -56,6 +57,23 @@ func Register(se *core.ServeEvent, baseURL, orgName string) {
 	se.Router.GET("/host/integrations", serveFile("web/host-dashboard.html", orgName, nil))
 
 	se.Router.GET("/embed.js", serveEmbed())
+
+	// Kurz-/Legacy-Buchungslinks: /{host}/{slug} → /book/{host}/{slug}.
+	// Frühe Setup-Mails verschickten Links ohne das /book/-Präfix; book.html
+	// verlangt es aber strikt (section !== 'book' ⇒ „resource wasn't found").
+	// Literale Routen gewinnen im Router gegen diesen Wildcard; interne
+	// Präfixe sind zusätzlich ausgenommen, damit vertippte API-/Konsolen-
+	// Pfade ein sauberes 404 statt einer Buchungsseite bekommen.
+	se.Router.GET("/{host}/{slug}", func(e *core.RequestEvent) error {
+		host := e.Request.PathValue("host")
+		slug := e.Request.PathValue("slug")
+		switch host {
+		case "api", "book", "host", "admin", "manage", "oauth", "_", "embed.js":
+			return e.String(http.StatusNotFound, "not found")
+		}
+		return e.Redirect(http.StatusFound,
+			"/book/"+url.PathEscape(host)+"/"+url.PathEscape(slug))
+	})
 }
 
 func serveEmbed() func(e *core.RequestEvent) error {
