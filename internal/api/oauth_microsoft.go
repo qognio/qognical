@@ -70,11 +70,21 @@ func (m *MSOAuth) redirectURI() string {
 	return strings.TrimRight(m.BaseURL, "/") + "/oauth/microsoft/callback"
 }
 
+// stateHMACKey derives a dedicated HMAC key for the signed state from the
+// configured StateKey. StateKey is wired from the AES encryption key, so
+// signing state directly with it would reuse one key for two cryptographic
+// purposes; the domain-separated derivation keeps them independent.
+func (m *MSOAuth) stateHMACKey() []byte {
+	h := hmac.New(sha256.New, m.StateKey)
+	h.Write([]byte("qognical/oauth-microsoft/state-sig/v1"))
+	return h.Sum(nil)
+}
+
 // signState binds "hostID.expiryUnix" with HMAC so the public callback can
 // trust which host consented — no server-side session store, survives restarts.
 func (m *MSOAuth) signState(hostID string, exp int64) string {
 	payload := hostID + "." + strconv.FormatInt(exp, 10)
-	mac := hmac.New(sha256.New, m.StateKey)
+	mac := hmac.New(sha256.New, m.stateHMACKey())
 	mac.Write([]byte(payload))
 	sig := base64.RawURLEncoding.EncodeToString(mac.Sum(nil))
 	return base64.RawURLEncoding.EncodeToString([]byte(payload)) + "." + sig
@@ -90,7 +100,7 @@ func (m *MSOAuth) verifyState(state string) (string, error) {
 		return "", fmt.Errorf("bad state encoding")
 	}
 	payload := string(raw)
-	mac := hmac.New(sha256.New, m.StateKey)
+	mac := hmac.New(sha256.New, m.stateHMACKey())
 	mac.Write([]byte(payload))
 	want := base64.RawURLEncoding.EncodeToString(mac.Sum(nil))
 	if !hmac.Equal([]byte(want), []byte(parts[1])) {
