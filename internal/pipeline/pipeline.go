@@ -243,9 +243,19 @@ func (p *Pipeline) Run(req Request) (Result, error) {
 		result.CheckoutURL = checkout.RedirectURL
 		_, _ = p.repo.SetBookingPaymentResult(booking.ID, state.StatusPendingPayment, "pending", checkout.ExternalID, 0)
 	default: // confirmed
-		if err := p.confirmTail(booking, et, host, tok); err != nil {
-			slog.Warn("confirm tail failed", "booking", booking.ID, "err", err)
-		}
+		// Async: confirmTail erstellt Meeting + versendet Bestätigungsmails
+		// (SMTP), was real 12–25s+ dauern kann. Die Buchung ist hier bereits
+		// reserviert (Schritt 4) + der Manage-Token ausgestellt (Schritt 5);
+		// die HTTP-Antwort (status/manage_url, api.go) hängt NICHT von
+		// confirmTail ab. Synchron blockierte der Handler bis zum Mailversand
+		// → Client-Timeout beim Bridge-POST TROTZ erfolgreicher Buchung
+		// (verifiziert 2026-07-24). confirmTail hat ein eigenes 30s-Context-
+		// Timeout + loggt Fehler; Meeting/Mail sind best-effort (INV-5).
+		go func(b store.Booking, et store.EventType, h store.Host, t token.Token) {
+			if err := p.confirmTail(b, et, h, t); err != nil {
+				slog.Warn("confirm tail failed", "booking", b.ID, "err", err)
+			}
+		}(booking, et, host, tok)
 	}
 
 	_ = p.repo.WriteAudit(store.AuditEntry{
